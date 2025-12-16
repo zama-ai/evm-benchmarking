@@ -1,0 +1,48 @@
+{
+	"compilerOptions": {
+		"target": "ESNext",
+		"lib": ["ESNext", "DOM"],
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"resolveJsonModule": true,
+		"allowJs": true,
+		"checkJs": false,
+		"strict": true,
+		"esModuleInterop": true,
+		"allowImportingTsExtensions": true,
+		"noEmit": true,
+		"skipLibCheck": true,
+		"baseUrl": ".",
+		"typeRoots": ["./node_modules/@types", "./xk6-ethereum/types", "./types"],
+		"paths": {
+			"k6/x/ethereum": ["xk6-ethereum/types/index.d.ts"],
+			"k6/x/ethereum/*": ["xk6-ethereum/types/index.d.ts"]
+		},
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true,
+		"noImplicitReturns": true,
+		"noFallthroughCasesInSwitch": true,
+		"allowSyntheticDefaultImports": true,
+		"experimentalDecorators": true,
+		"emitDecoratorMetadata": true,
+		"noImplicitAny": true,
+		"noImplicitThis": true,
+		"exactOptionalPropertyTypes": true
+	},
+	"include": [
+		"src/*.ts",
+		"scripts/**/*.ts",
+		"helpers/**/*.ts",
+		"types/**/*.d.ts",
+		"xk6-ethereum/types/**/*.d.ts",
+		"xk6-ethereum/examples/**/*.ts"
+	],
+	"exclude": [
+		"build/**",
+		"dist/**",
+		"node_modules/**",
+		"src/user_decrypt_mock/**"
+	]
+}

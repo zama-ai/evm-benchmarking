@@ -1,0 +1,198 @@
+name: CI - Blockchain L3 Rollup Benchmark
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: read
+
+defaults:
+  run:
+    working-directory: .
+
+jobs:
+  paths-filter:
+    name: Check Changed Paths
+    runs-on: ubuntu-latest
+    outputs:
+      benchmark: ${{ steps.filter.outputs.benchmark }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            benchmark:
+              - '**'
+              - '.github/workflows/ci.yml'
+
+  build-contracts:
+    name: Build Foundry Contracts
+    runs-on: ubuntu-latest
+    needs: paths-filter
+    if: needs.paths-filter.outputs.benchmark == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.5.0
+
+      - name: Restore contracts build cache
+        uses: actions/cache@v4
+        id: cache
+        with:
+          path: contracts/out
+          key: contracts-build-${{ hashFiles('contracts/src/**', 'contracts/foundry.toml', 'contracts/foundry.lock') }}
+
+      - name: Build contracts
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: make build-contracts
+
+  build-k6:
+    name: Build Custom k6 Binary
+    runs-on: ubuntu-latest
+    needs: paths-filter
+    if: needs.paths-filter.outputs.benchmark == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.24.0
+
+      - name: Restore k6 binary from cache
+        uses: actions/cache@v4
+        id: cache
+        with:
+          path: build/k6
+          key: k6-binary-${{ hashFiles('xk6-*/**/*.go', 'xk6-*/**/go.sum') }}
+
+      - name: Install xk6
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: go install go.k6.io/xk6/cmd/xk6@latest
+
+      - name: Build custom k6 binary
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: make build
+
+  test-go:
+    name: Run Go Tests
+    runs-on: ubuntu-latest
+    needs: paths-filter
+    if: needs.paths-filter.outputs.benchmark == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.24.0
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.5.0
+
+      - name: Start Anvil
+        run: |
+          anvil --port 8545 --block-time 0.2 --gas-price 1 &
+          echo "ANVIL_PID=$!" >> $GITHUB_ENV
+          sleep 5
+
+      - name: Wait for Anvil to be ready
+        run: |
+          for i in {1..30}; do
+            if curl -s -X POST -H "Content-Type: application/json" \
+              --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
+              http://127.0.0.1:8545 > /dev/null 2>&1; then
+              echo "Anvil is ready"
+              exit 0
+            fi
+            echo "Waiting for Anvil... ($i/30)"
+            sleep 2
+          done
+          echo "Anvil failed to start"
+          exit 1
+
+      - name: Run Go tests
+        working-directory: xk6-ethereum
+        run: go test -v -race -coverprofile=coverage.out
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: xk6-ethereum/coverage.out
+          flags: go-tests
+          name: go-coverage
+          fail_ci_if_error: false
+
+      - name: Cleanup Anvil
+        if: always()
+        run: |
+          if [ -n "$ANVIL_PID" ]; then
+            kill $ANVIL_PID || true
+          fi
+
+  run-examples:
+    name: Run k6 Examples
+    runs-on: ubuntu-latest
+    needs: [paths-filter, build-contracts, build-k6]
+    if: needs.paths-filter.outputs.benchmark == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.24.0
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.5.0
+
+      - name: Restore contracts build cache
+        uses: actions/cache@v4
+        with:
+          path: contracts/out
+          key: contracts-build-${{ hashFiles('contracts/src/**', 'contracts/foundry.toml', 'contracts/foundry.lock') }}
+          fail-on-cache-miss: true
+
+      - name: Restore k6 binary cache
+        uses: actions/cache@v4
+        with:
+          path: build/k6
+          key: k6-binary-${{ hashFiles('xk6-*/**/*.go', 'xk6-*/**/go.sum') }}
+          fail-on-cache-miss: true
+
+      - name: Make k6 binary executable
+        run: chmod +x build/k6
+
+      - name: Run benchmark smoke tests
+        run: bash scripts/ci_smoke_test.sh
+
+      - name: Cleanup Anvil
+        if: always()
+        run: |
+          if [ -n "$ANVIL_PID" ]; then
+            kill $ANVIL_PID || true
+          fi

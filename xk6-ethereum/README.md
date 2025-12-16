@@ -1,0 +1,156 @@
+# xk6-ethereum
+
+A k6 extension for interacting with EVM-based blockchains. Provides Ethereum RPC
+client capabilities and wallet utilities for load testing blockchain
+applications.
+
+## Installation
+
+Build a custom k6 binary with this extension using
+[xk6](https://github.com/grafana/xk6):
+
+```bash
+go install go.k6.io/xk6/cmd/xk6@latest
+
+xk6 build --with xk6-ethereum=/path/to/xk6-ethereum
+```
+
+This produces a `k6` binary with the extension included.
+
+## Usage
+
+### Creating a Client
+
+```typescript
+import eth from "k6/x/ethereum";
+
+const client = new eth.Client({
+  url: "http://127.0.0.1:8545",
+  privateKey: "your-private-key-hex", // optional, for signing transactions
+});
+```
+
+### Sending Transactions
+
+The extension provides several methods depending on your needs:
+
+| Method                            | Waits for Receipt | Best For                                |
+| --------------------------------- | ----------------- | --------------------------------------- |
+| `sendTransaction(tx)`             | No                | Fire-and-forget scenarios               |
+| `sendTransactionSync(tx)`         | Yes               | Nodes with `eth_sendRawTransactionSync` |
+| `sendTransactionAndWaitReceipt()` | Yes (polling)     | Standard nodes                          |
+
+```typescript
+// Fire-and-forget
+const hash = client.sendTransaction({ to: address, value: 1000 });
+
+// Wait for receipt (sync RPC)
+const receipt = client.sendTransactionSync({ to: address, value: 1000 });
+
+// Wait for receipt (polling)
+const receipt = client.sendTransactionAndWaitReceipt({
+  to: address,
+  value: 1000,
+});
+```
+
+### Contract Interactions
+
+```typescript
+const contract = client.newContract(contractAddress, abiJson);
+
+// Read-only call
+const balance = contract.call("balanceOf", address);
+
+// Write transaction (fire-and-forget)
+const hash = contract.txn("transfer", { gasPrice: 1000000 }, recipient, amount);
+
+// Write transaction (wait for receipt)
+const receipt = contract.txnSync(
+  "transfer",
+  { gasPrice: 1000000 },
+  recipient,
+  amount,
+);
+
+// Encode calldata without sending
+const calldata = contract.encodeABI("transfer", recipient, amount);
+```
+
+### Batch Operations (Multicall3)
+
+```typescript
+import type { Call3 } from "k6/x/ethereum";
+
+const calls: Call3[] = [
+  {
+    target: tokenAddr,
+    allowFailure: false,
+    calldata: contract.encodeABI("transfer", addr1, 100n),
+  },
+  {
+    target: tokenAddr,
+    allowFailure: false,
+    calldata: contract.encodeABI("transfer", addr2, 100n),
+  },
+];
+
+const receipt = client.batchCallSync(multicallAddress, calls, { gasPrice });
+```
+
+### Wallet Utilities
+
+```typescript
+import * as wallet from "k6/x/ethereum/wallet";
+
+// Generate a new key pair
+const account = wallet.generateKey();
+
+// Derive accounts from mnemonic (BIP-44 path: m/44'/60'/0'/0/i)
+const accounts = wallet.accountsFromMnemonic(
+  "test test test test test test test test test test test junk",
+  10, // count
+);
+
+// Import from private key
+const account = wallet.accountFromPrivateKey("0x...");
+```
+
+## Metrics
+
+The extension collects and exports the following metrics to InfluxDB (via
+xk6-output-influxdb or compatible outputs):
+
+| Metric                  | Type  | Description                                              |
+| ----------------------- | ----- | -------------------------------------------------------- |
+| `ethereum_block`        | Gauge | Current block number observed during monitoring          |
+| `ethereum_tps`          | Gauge | Transactions per second (mined in each block)            |
+| `ethereum_time_to_mine` | Trend | Time from transaction submission to block inclusion (ms) |
+| `ethereum_req_duration` | Trend | Duration of individual RPC calls (ms)                    |
+
+### Block Monitoring
+
+To collect block-level metrics (`ethereum_block`, `ethereum_tps`), use the block
+monitor in a dedicated scenario:
+
+```typescript
+const monitor = client.newBlockMonitor(10); // batch size
+
+export function monitorBlocks() {
+  monitor.processBlockEvent(); // Processes new blocks and emits metrics
+}
+```
+
+The monitor subscribes to new block headers and calculates TPS based on
+transaction counts per block.
+
+## API Reference
+
+See [types/index.d.ts](types/index.d.ts) for the complete TypeScript type
+definitions covering all client methods, transaction types, and wallet
+utilities.
+
+## License
+
+MIT License. Portions derived from
+[xk6-ethereum](https://github.com/distribworks/xk6-ethereum).

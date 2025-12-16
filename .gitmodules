@@ -1,0 +1,19 @@
+[submodule "contracts/lib/openzeppelin-contracts"]
+	path = contracts/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
+[submodule "contracts/lib/fhevm"]
+	path = contracts/lib/fhevm
+	url = https://github.com/zama-ai/fhevm
+	rev = b30eda16cefedabe79a92df8f6f742b18a55be70
+[submodule "contracts/lib/openzeppelin-contracts-upgradeable"]
+	path = contracts/lib/openzeppelin-contracts-upgradeable
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable
+[submodule "contracts/lib/multicall3"]
+	path = contracts/lib/multicall3
+	url = https://github.com/mds1/multicall3
+[submodule "contracts/lib/forge-std"]
+	path = contracts/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "contracts/lib/optimism"]
+	path = contracts/lib/optimism
+	url = https://github.com/ethereum-optimism/optimism

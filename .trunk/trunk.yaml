@@ -1,0 +1,180 @@
+# This file controls the behavior of Trunk: https://docs.trunk.io/cli
+# To learn more about the format of this file, see https://docs.trunk.io/reference/trunk-yaml
+version: 0.1
+cli:
+  version: 1.25.0
+# Trunk provides extensibility via plugins. (https://docs.trunk.io/plugins)
+plugins:
+  sources:
+    - id: trunk
+      ref: v1.7.4
+      uri: https://github.com/trunk-io/plugins
+# Many linters and tools depend on runtimes - configure them here. (https://docs.trunk.io/runtimes)
+runtimes:
+  enabled:
+    - go@1.25.0
+    - node@22.16.0
+    - python@3.10.8
+# Tool downloads configuration
+downloads:
+  - name: foundry
+    downloads:
+      - os:
+          linux: linux
+          windows: win32
+          macos: darwin
+        cpu:
+          x86_64: amd64
+          arm_64: arm64
+        url: https://github.com/foundry-rs/foundry/releases/download/v${version}/foundry_v${version}_${os}_${cpu}.tar.gz
+        strip_components: 0
+tools:
+  enabled:
+    - foundry@1.5.0-rc1
+  definitions:
+    - name: foundry
+      download: foundry
+      known_good_version: 1.5.0-rc1
+      environment:
+        - name: PATH
+          list: ["${tool}/bin"]
+      shims:
+        - name: forge
+          target: forge
+    - name: solhint
+      runtime: node
+      package: solhint
+      known_good_version: 6.0.1
+      shims: [solhint]
+      extra_packages:
+        - solhint-plugin-openzeppelin
+# This is the section where you manage your linters. (https://docs.trunk.io/check/configuration)
+lint:
+  ignore:
+    - linters: [ALL]
+      paths:
+        - "**/artifacts/**"
+        - "**/build-info/**"
+        - "**/cache/**"
+        - "**/*.abi"
+        - "**/*.bin"
+        - "**/*.min.js"
+        - "**/*.min.css"
+        - "**/contracts/lib/**"
+        - "**/contracts/src/mocks/**"
+        - .claude/state/**
+    - linters: [cspell]
+      paths:
+        - "**/*.work.sum"
+        - "**/.claude/state/**"
+        - grafana/dashboards/**
+        - contracts/proofs/**
+    - linters: [gitleaks]
+      paths:
+        - "**/.env.example"
+    - linters: [solhint]
+      paths:
+        - "**/scripts/*.s.sol"
+  files:
+    - name: solidity
+      extensions:
+        - sol
+  definitions:
+    - name: tsc
+      files: [typescript]
+      commands:
+        - output: regex
+          run: npx tsc --noEmit
+          success_codes: [0, 2]
+          parse_regex: '(?P<path>[^\(]+)\((?P<line>\d+),(?P<col>\d+)\): (?P<severity>error|warning) TS\d+: (?P<message>.+)'
+          read_output_from: stdout
+          run_from: ${root_or_parent_with(tsconfig.json)}
+    - name: golangci-lint2
+      commands:
+        - run_from: ${target_directory}
+          run: golangci-lint run --output.sarif.path ${tmpfile} --timeout 10m --concurrency 1 --allow-parallel-runners --issues-exit-code 0 ${target} --path-mode abs
+
+    - name: forge-fmt
+      files: [solidity]
+      tools: [foundry]
+      environment:
+        - name: FOUNDRY_DISABLE_NIGHTLY_WARNING
+          value: "1"
+      commands:
+        - output: rewrite
+          success_codes: [0, 1]
+          no_issues_codes: [0]
+          formatter: true
+          run: forge fmt ${target} --check -r
+          read_output_from: stdout
+          run_linter_from: workspace
+    - name: solhint
+      files: [solidity]
+      tools: [solhint]
+      commands:
+        - run: solhint --disc -f sarif ${target}
+          output: sarif
+          success_codes: [0, 1]
+          read_output_from: stdout
+          run_from: ${root_or_parent_with(.solhint.json)}
+    - name: clippy
+      # Override default environment to avoid building the guest program due to missing `std` crate with trunk.
+      environment:
+        - name: PATH
+          list: ["${linter}/bin", "${env.PATH}"]
+        - name: CARGO_HOME
+          value: ${cachedir}/cargo_home
+        - name: CARGO_TARGET_DIR
+          value: ${cachedir}/cargo_target_dir
+        - name: RISC0_SKIP_BUILD
+          value: "1"
+      known_good_version: 1.89.0
+    - name: prettier
+      files: [markdown]
+      tools: [prettier]
+  enabled:
+    # Go tooling
+    - solhint@6.0.1
+    - bandit@1.9.2
+    - black@25.12.0
+    - isort@7.0.0
+    - ruff@0.14.8
+    - hadolint@2.14.0
+    - golangci-lint2@2.6.2
+    - gofumpt@0.9.0
+    - goimports@0.29.0
+    - prettier@3.7.4
+    - cspell@9.4.0
+    # TypeScript tooling
+    - biome@2.3.8
+    - tsc
+    # Solidity tooling
+    - forge-fmt
+    # Shell tooling
+    - shellcheck@0.11.0
+    - shfmt@3.6.0
+    # Repo hygiene
+    - actionlint@1.7.9
+    - gitleaks@8.29.0
+    - markdownlint@0.46.0
+    - yamllint@1.37.1
+    # Other tools
+    - checkov@3.2.495
+    - clippy@1.89.0
+    - git-diff-check
+    - oxipng@9.1.5
+    - rustfmt@1.89.0
+    - svgo@4.0.0
+    - taplo@0.10.0
+    - trufflehog@3.91.0
+  disabled:
+    - osv-scanner
+    - gofmt  # Using gofumpt instead
+actions:
+  enabled:
+    - commitlint
+    - git-lfs
+    - trunk-announce
+    - trunk-check-pre-push
+    - trunk-fmt-pre-commit
+    - trunk-upgrade-available

@@ -1,0 +1,14 @@
+build/
+k6/
+submit-confirm-summary.json
+node_modules/
+dist/
+.env*
+!.env.example
+summary*
+
+contracts/cache/
+contracts/out/
+contracts/proofs/
+
+tmp.json

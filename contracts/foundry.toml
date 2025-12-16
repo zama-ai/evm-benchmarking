@@ -1,0 +1,36 @@
+[profile.default]
+src = "src"
+skip = ["src/mocks/GatewayAddressesMock.sol"]
+out = "out"
+libs = ["lib"]
+
+# Emit standalone .abi and .bin files alongside JSON artifacts
+extra_output = ["abi", "bin"]
+extra_output_files = ["abi", "bin"]
+
+# Remappings for dependencies
+remappings = [
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+  "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+  "@gateway-contracts/=lib/fhevm/gateway-contracts/contracts/",
+  "fhevm/=lib/fhevm/",
+  "@multicall3=lib/multicall3/src",
+  "forge-std/=lib/forge-std/src/",
+  "@optimism-bedrock/=lib/optimism/packages/contracts-bedrock/src/",
+  "src/libraries/=lib/optimism/packages/contracts-bedrock/src/libraries/",
+]
+
+# Test directory
+test = "test"
+
+# Allow reading proof files in tests
+fs_permissions = [{ access = "read", path = "./" }]
+
+[lint]
+exclude_lints = [
+  "asm-keccak256",
+  "mixed-case-function",
+  "screaming-snake-case-const",
+]
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

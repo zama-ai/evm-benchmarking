@@ -1,0 +1,48 @@
+# This file contains all available configuration options
+# with their default values (in comments).
+#
+# This file is not a configuration example,
+# it contains the exhaustive configuration with explanations of the options.
+
+# Defines the configuration version.
+# The only possible value is "2".
+version: "2"
+
+linters:
+  default: all
+  enable:
+    - wsl_v5
+  disable:
+    # Disabled linters that are too strict for this codebase.
+    - exhaustruct  # Requiring all struct fields is too verbose for external library types.
+    - ireturn      # Returning interfaces is a valid pattern for module registration.
+    - funcorder    # Method ordering is not critical for readability.
+    - mnd          # Magic numbers are acceptable in many contexts.
+    - testpackage  # Testing in the same package is fine for testing internal functions.
+    - paralleltest  # Not all tests need to run in parallel.
+    - lll          # Line length limits are handled by formatters.
+    - nolintlint   # Nolint directive validation can conflict with real needs.
+    - noinlineerr  # Inline error handling is idiomatic in Go.
+    - gomoddirectives  # We replace go-ethereum with OffchainLabs' fork.
+    - cyclop        # Cyclomatic complexity is acceptable in many contexts.
+    - musttag       # Tagging with js is not recognized.
+  settings:
+    depguard:
+      rules:
+        main:
+          list-mode: lax
+          allow:
+            - $gostd
+            - github.com/umbracle/ethgo
+            - github.com/grafana/sobek
+            - go.k6.io/k6
+            - github.com/ethereum/go-ethereum
+            - github.com/btcsuite/btcd
+            - github.com/btcsuite/btcutil
+            - github.com/tyler-smith/go-bip39
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2
+    funlen:
+      lines: 120

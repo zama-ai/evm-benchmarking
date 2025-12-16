@@ -1,0 +1,2191 @@
+{
+	"annotations": {
+		"list": [
+			{
+				"builtIn": 1,
+				"datasource": {
+					"type": "grafana",
+					"uid": "-- Grafana --"
+				},
+				"enable": true,
+				"hide": true,
+				"iconColor": "rgba(0, 211, 255, 1)",
+				"name": "Annotations & Alerts",
+				"type": "dashboard"
+			}
+		]
+	},
+	"description": "Comprehensive blockchain performance metrics from xk6-ethereum K6 benchmarks",
+	"editable": true,
+	"fiscalYearStartMonth": 0,
+	"graphTooltip": 1,
+	"id": 1,
+	"links": [],
+	"liveNow": true,
+	"panels": [
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "Best case for each scenario",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "thresholds"
+					},
+					"custom": {
+						"align": "auto",
+						"cellOptions": {
+							"type": "auto"
+						},
+						"footer": {
+							"reducers": []
+						},
+						"inspect": false
+					},
+					"fieldMinMax": false,
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							}
+						]
+					},
+					"unit": "sishort"
+				},
+				"overrides": [
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "name"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 371
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "UOPS"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 67
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "TPS"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 66
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "Gas"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 94
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "Gas/s"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 100
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "Batch size"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 102
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "rate"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 103
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "Scenario"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 114
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "type"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 116
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "min"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 68
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "max"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 77
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "commit"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 91
+							},
+							{
+								"id": "unit",
+								"value": "string"
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "Type"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 69
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "UOPS (max)"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 105
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "TPS (max)"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 95
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "Gas/s (max)"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 106
+							}
+						]
+					}
+				]
+			},
+			"gridPos": {
+				"h": 8,
+				"w": 16,
+				"x": 0,
+				"y": 0
+			},
+			"id": 111,
+			"options": {
+				"cellHeight": "sm",
+				"frameIndex": 1,
+				"showHeader": true,
+				"sortBy": [
+					{
+						"desc": false,
+						"displayName": "Scenario"
+					}
+				]
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"alias": "",
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT name, commit, MAX(sum_value) AS \"UOPS\" FROM (SELECT DATE_BIN(INTERVAL '1 second', time) AS time, name, commit, SUM(value) AS sum_value FROM \"ethereum_uops\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '1 second', time), name, commit) GROUP BY name, commit",
+					"refId": "A",
+					"resultFormat": "table"
+				},
+				{
+					"alias": "",
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"hide": false,
+					"rawQuery": true,
+					"rawSql": "SELECT name, commit, MAX(sum_value) AS \"TPS\" FROM (SELECT DATE_BIN(INTERVAL '1 second', time) AS time, name, commit, SUM(value) AS sum_value FROM \"ethereum_block_transactions\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '1 second', time), name, commit) GROUP BY name, commit",
+					"refId": "B",
+					"resultFormat": "table"
+				},
+				{
+					"alias": "",
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"hide": false,
+					"rawQuery": true,
+					"rawSql": "SELECT name, commit, MAX(sum_value) AS \"Gas/s\" FROM (SELECT DATE_BIN(INTERVAL '1 second', time) AS time, name, commit, SUM(value) AS sum_value FROM \"ethereum_gas_used\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '1 second', time), name, commit) GROUP BY name, commit",
+					"refId": "C",
+					"resultFormat": "table"
+				}
+			],
+			"title": "Global summary",
+			"transformations": [
+				{
+					"id": "merge",
+					"options": {}
+				},
+				{
+					"id": "groupBy",
+					"options": {
+						"fields": {
+							"Gas/s": {
+								"aggregations": ["max"],
+								"operation": "aggregate"
+							},
+							"TPS": {
+								"aggregations": ["max"],
+								"operation": "aggregate"
+							},
+							"UOPS": {
+								"aggregations": ["max"],
+								"operation": "aggregate"
+							},
+							"commit": {
+								"aggregations": [],
+								"operation": "groupby"
+							},
+							"name": {
+								"aggregations": [],
+								"operation": "groupby"
+							}
+						}
+					}
+				},
+				{
+					"id": "extractFields",
+					"options": {
+						"delimiter": ",",
+						"format": "kvp",
+						"keepTime": false,
+						"replace": false,
+						"source": "name"
+					}
+				},
+				{
+					"id": "organize",
+					"options": {
+						"excludeByName": {
+							"Time": true,
+							"name": true
+						},
+						"includeByName": {},
+						"indexByName": {
+							"Gas/s": 9,
+							"TPS": 8,
+							"Time": 0,
+							"UOPS": 7,
+							"batch": 4,
+							"commit": 3,
+							"func": 2,
+							"name": 1,
+							"rate": 5,
+							"type": 6
+						},
+						"renameByName": {
+							"UOPS": "",
+							"batch": "Batch size",
+							"commit": "Commit",
+							"func": "Scenario",
+							"rate": "K6 rate",
+							"type": "Type"
+						}
+					}
+				}
+			],
+			"type": "table"
+		},
+		{
+			"collapsed": false,
+			"gridPos": {
+				"h": 1,
+				"w": 24,
+				"x": 0,
+				"y": 8
+			},
+			"id": 104,
+			"panels": [],
+			"title": "Summary Statistics",
+			"type": "row"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "User Operations Per Second",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "thresholds"
+					},
+					"fieldMinMax": false,
+					"mappings": [],
+					"min": 0,
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							}
+						]
+					},
+					"unit": "uops"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 0,
+				"y": 9
+			},
+			"id": 108,
+			"options": {
+				"minVizHeight": 75,
+				"minVizWidth": 75,
+				"orientation": "auto",
+				"reduceOptions": {
+					"calcs": ["lastNotNull"],
+					"fields": "",
+					"values": false
+				},
+				"showThresholdLabels": false,
+				"showThresholdMarkers": true,
+				"sizing": "auto"
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT DATE_BIN(INTERVAL '1 second', time) AS time, SUM(value) AS \"UOPS\" FROM \"ethereum_uops\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '1 second', time) ORDER BY time ASC",
+					"refId": "A",
+					"resultFormat": "time_series"
+				}
+			],
+			"title": "UOPS",
+			"type": "gauge"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "Transactions Per Second",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "thresholds"
+					},
+					"fieldMinMax": false,
+					"mappings": [],
+					"min": 0,
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							}
+						]
+					},
+					"unit": "tps"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 4,
+				"y": 9
+			},
+			"id": 109,
+			"options": {
+				"minVizHeight": 75,
+				"minVizWidth": 75,
+				"orientation": "auto",
+				"reduceOptions": {
+					"calcs": ["lastNotNull"],
+					"fields": "",
+					"values": false
+				},
+				"showThresholdLabels": false,
+				"showThresholdMarkers": true,
+				"sizing": "auto"
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT DATE_BIN(INTERVAL '1 second', time) AS time, SUM(value) AS \"TPS\" FROM \"ethereum_block_transactions\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '1 second', time) ORDER BY time ASC",
+					"refId": "A",
+					"resultFormat": "time_series"
+				}
+			],
+			"title": "TPS",
+			"type": "gauge"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "95th percentile time to mine - critical for SLA compliance",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "thresholds"
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							},
+							{
+								"color": "yellow",
+								"value": 5000
+							},
+							{
+								"color": "red",
+								"value": 10000
+							}
+						]
+					},
+					"unit": "ms"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 8,
+				"y": 9
+			},
+			"id": 16,
+			"options": {
+				"colorMode": "value",
+				"graphMode": "area",
+				"justifyMode": "auto",
+				"orientation": "auto",
+				"percentChangeColorMode": "standard",
+				"reduceOptions": {
+					"calcs": ["last"],
+					"fields": "",
+					"values": false
+				},
+				"showPercentChange": false,
+				"textMode": "auto",
+				"wideLayout": true
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT approx_percentile_cont(0.95) WITHIN GROUP (ORDER BY value) AS \"p95\" FROM \"ethereum_time_to_mine\" WHERE time >= $__timeFrom AND time <= $__timeTo",
+					"refId": "A",
+					"resultFormat": "time_series"
+				}
+			],
+			"title": "p95 Time to Mine",
+			"type": "stat"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "Gas usage of the last block",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "thresholds"
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							}
+						]
+					},
+					"unit": "sishort"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 12,
+				"y": 9
+			},
+			"id": 14,
+			"options": {
+				"colorMode": "value",
+				"graphMode": "area",
+				"justifyMode": "auto",
+				"orientation": "auto",
+				"percentChangeColorMode": "standard",
+				"reduceOptions": {
+					"calcs": ["last"],
+					"fields": "",
+					"values": false
+				},
+				"showPercentChange": false,
+				"textMode": "auto",
+				"wideLayout": true
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT time, value FROM \"ethereum_gas_used\" WHERE time >= $__timeFrom AND time <= $__timeTo ORDER BY time ASC",
+					"refId": "A",
+					"resultFormat": "time_series"
+				}
+			],
+			"title": "Block Gas Usage",
+			"type": "stat"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "Time to mine the latest block",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "thresholds"
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							},
+							{
+								"color": "yellow",
+								"value": 5000
+							},
+							{
+								"color": "red",
+								"value": 10000
+							}
+						]
+					},
+					"unit": "ms"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 16,
+				"y": 9
+			},
+			"id": 13,
+			"options": {
+				"minVizHeight": 75,
+				"minVizWidth": 75,
+				"orientation": "auto",
+				"reduceOptions": {
+					"calcs": ["last"],
+					"fields": "",
+					"values": false
+				},
+				"showThresholdLabels": false,
+				"showThresholdMarkers": true,
+				"sizing": "auto"
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT time, value FROM \"ethereum_block_time\" WHERE time >= $__timeFrom AND time <= $__timeTo ORDER BY time ASC",
+					"refId": "A",
+					"resultFormat": "time_series"
+				}
+			],
+			"title": "Block Time",
+			"type": "gauge"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "See also chain speed limit https://docs.arbitrum.io/how-arbitrum-works/deep-dives/gas-and-fees#the-speed-limit",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "thresholds"
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							}
+						]
+					},
+					"unit": "sishort"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 20,
+				"y": 9
+			},
+			"id": 17,
+			"options": {
+				"minVizHeight": 75,
+				"minVizWidth": 75,
+				"orientation": "auto",
+				"reduceOptions": {
+					"calcs": ["lastNotNull"],
+					"fields": "",
+					"values": false
+				},
+				"showThresholdLabels": false,
+				"showThresholdMarkers": true,
+				"sizing": "auto"
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT DATE_BIN(INTERVAL '1 second', time) AS time, SUM(value) AS \"Mgas/s\" FROM \"ethereum_gas_used\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '1 second', time) ORDER BY time ASC",
+					"refId": "A",
+					"resultFormat": "time_series"
+				}
+			],
+			"title": "Sequencer throughput (gas/s)",
+			"type": "gauge"
+		},
+		{
+			"collapsed": false,
+			"gridPos": {
+				"h": 1,
+				"w": 24,
+				"x": 0,
+				"y": 13
+			},
+			"id": 100,
+			"panels": [],
+			"title": "Throughput & Capacity",
+			"type": "row"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "Transactions and User Operations Per Second",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "palette-classic"
+					},
+					"custom": {
+						"axisBorderShow": false,
+						"axisCenteredZero": false,
+						"axisColorMode": "text",
+						"axisLabel": "",
+						"axisPlacement": "auto",
+						"barAlignment": 0,
+						"barWidthFactor": 0.6,
+						"drawStyle": "line",
+						"fillOpacity": 10,
+						"gradientMode": "none",
+						"hideFrom": {
+							"legend": false,
+							"tooltip": false,
+							"viz": false
+						},
+						"insertNulls": 10000,
+						"lineInterpolation": "linear",
+						"lineStyle": {
+							"fill": "solid"
+						},
+						"lineWidth": 2,
+						"pointSize": 5,
+						"scaleDistribution": {
+							"type": "linear"
+						},
+						"showPoints": "never",
+						"showValues": false,
+						"spanNulls": false,
+						"stacking": {
+							"group": "A",
+							"mode": "none"
+						},
+						"thresholdsStyle": {
+							"mode": "off"
+						}
+					},
+					"fieldMinMax": false,
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							}
+						]
+					}
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 8,
+				"w": 8,
+				"x": 0,
+				"y": 14
+			},
+			"id": 1,
+			"options": {
+				"legend": {
+					"calcs": ["min", "median", "max", "mean", "stdDev"],
+					"displayMode": "table",
+					"placement": "bottom",
+					"showLegend": true
+				},
+				"tooltip": {
+					"hideZeros": false,
+					"mode": "multi",
+					"sort": "none"
+				}
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT DATE_BIN(INTERVAL '2 seconds', time) AS time, SUM(value) / 2 AS \"UOPS\" FROM \"ethereum_uops\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '2 seconds', time) ORDER BY time ASC",
+					"refId": "A",
+					"resultFormat": "time_series"
+				},
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"hide": false,
+					"rawQuery": true,
+					"rawSql": "SELECT DATE_BIN(INTERVAL '2 seconds', time) AS time, SUM(value) / 2 AS \"TPS\" FROM \"ethereum_block_transactions\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '2 seconds', time) ORDER BY time ASC",
+					"refId": "B",
+					"resultFormat": "time_series"
+				}
+			],
+			"title": "User throughput (tps and uops)",
+			"type": "timeseries"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "Time from transaction submission to block inclusion - critical metric for confirmation latency",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "palette-classic"
+					},
+					"custom": {
+						"axisBorderShow": false,
+						"axisCenteredZero": false,
+						"axisColorMode": "text",
+						"axisLabel": "",
+						"axisPlacement": "auto",
+						"barAlignment": 0,
+						"barWidthFactor": 0.6,
+						"drawStyle": "line",
+						"fillOpacity": 10,
+						"gradientMode": "none",
+						"hideFrom": {
+							"legend": false,
+							"tooltip": false,
+							"viz": false
+						},
+						"insertNulls": 10000,
+						"lineInterpolation": "smooth",
+						"lineWidth": 2,
+						"pointSize": 5,
+						"scaleDistribution": {
+							"type": "linear"
+						},
+						"showPoints": "never",
+						"showValues": false,
+						"spanNulls": false,
+						"stacking": {
+							"group": "A",
+							"mode": "none"
+						},
+						"thresholdsStyle": {
+							"mode": "off"
+						}
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							}
+						]
+					},
+					"unit": "ms"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 8,
+				"w": 8,
+				"x": 8,
+				"y": 14
+			},
+			"id": 5,
+			"options": {
+				"legend": {
+					"calcs": ["mean", "max", "last"],
+					"displayMode": "table",
+					"placement": "bottom",
+					"showLegend": true
+				},
+				"tooltip": {
+					"hideZeros": false,
+					"mode": "multi",
+					"sort": "none"
+				}
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT DATE_BIN(INTERVAL '10 seconds', time) AS time, approx_percentile_cont(0.50) WITHIN GROUP (ORDER BY value) AS \"p50\" FROM \"ethereum_time_to_mine\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '10 seconds', time) ORDER BY time ASC",
+					"refId": "A",
+					"resultFormat": "time_series"
+				},
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"hide": false,
+					"rawQuery": true,
+					"rawSql": "SELECT DATE_BIN(INTERVAL '10 seconds', time) AS time, approx_percentile_cont(0.95) WITHIN GROUP (ORDER BY value) AS \"p95\" FROM \"ethereum_time_to_mine\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '10 seconds', time) ORDER BY time ASC",
+					"refId": "B",
+					"resultFormat": "time_series"
+				},
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"hide": false,
+					"rawQuery": true,
+					"rawSql": "SELECT DATE_BIN(INTERVAL '10 seconds', time) AS time, approx_percentile_cont(0.99) WITHIN GROUP (ORDER BY value) AS \"p99\" FROM \"ethereum_time_to_mine\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '10 seconds', time) ORDER BY time ASC",
+					"refId": "C",
+					"resultFormat": "time_series"
+				}
+			],
+			"title": "Latency (time to mine)",
+			"type": "timeseries"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "See also chain speed limit https://docs.arbitrum.io/how-arbitrum-works/deep-dives/gas-and-fees#the-speed-limit",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "palette-classic"
+					},
+					"custom": {
+						"axisBorderShow": false,
+						"axisCenteredZero": false,
+						"axisColorMode": "text",
+						"axisLabel": "",
+						"axisPlacement": "auto",
+						"barAlignment": 0,
+						"barWidthFactor": 0.6,
+						"drawStyle": "line",
+						"fillOpacity": 10,
+						"gradientMode": "none",
+						"hideFrom": {
+							"legend": false,
+							"tooltip": false,
+							"viz": false
+						},
+						"insertNulls": 10000,
+						"lineInterpolation": "smooth",
+						"lineWidth": 2,
+						"pointSize": 5,
+						"scaleDistribution": {
+							"type": "linear"
+						},
+						"showPoints": "never",
+						"showValues": false,
+						"spanNulls": false,
+						"stacking": {
+							"group": "A",
+							"mode": "none"
+						},
+						"thresholdsStyle": {
+							"mode": "off"
+						}
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							}
+						]
+					},
+					"unit": "sishort"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 8,
+				"w": 8,
+				"x": 16,
+				"y": 14
+			},
+			"id": 110,
+			"options": {
+				"legend": {
+					"calcs": ["min", "median", "max", "mean", "stdDev"],
+					"displayMode": "table",
+					"placement": "bottom",
+					"showLegend": true
+				},
+				"tooltip": {
+					"hideZeros": false,
+					"mode": "single",
+					"sort": "none"
+				}
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT DATE_BIN(INTERVAL '2 seconds', time) AS time, SUM(value) / 2 AS \"Mgas/s\" FROM \"ethereum_gas_used\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '2 seconds', time) ORDER BY time ASC",
+					"refId": "A",
+					"resultFormat": "time_series"
+				}
+			],
+			"title": "Sequencer throughput (gas/s)",
+			"type": "timeseries"
+		},
+		{
+			"collapsed": false,
+			"gridPos": {
+				"h": 1,
+				"w": 24,
+				"x": 0,
+				"y": 22
+			},
+			"id": 103,
+			"panels": [],
+			"title": "Correlation & Analysis",
+			"type": "row"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "Correlation between gas usage and time to mine to see if heavier blocks take longer to mine",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "palette-classic"
+					},
+					"custom": {
+						"axisBorderShow": false,
+						"axisCenteredZero": false,
+						"axisColorMode": "text",
+						"axisLabel": "",
+						"axisPlacement": "auto",
+						"barAlignment": 0,
+						"barWidthFactor": 0.6,
+						"drawStyle": "line",
+						"fillOpacity": 10,
+						"gradientMode": "none",
+						"hideFrom": {
+							"legend": false,
+							"tooltip": false,
+							"viz": false
+						},
+						"insertNulls": 10000,
+						"lineInterpolation": "linear",
+						"lineWidth": 2,
+						"pointSize": 5,
+						"scaleDistribution": {
+							"type": "linear"
+						},
+						"showPoints": "never",
+						"showValues": false,
+						"spanNulls": false,
+						"stacking": {
+							"group": "A",
+							"mode": "none"
+						},
+						"thresholdsStyle": {
+							"mode": "off"
+						}
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							}
+						]
+					},
+					"unit": "short"
+				},
+				"overrides": [
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "Time to Mine"
+						},
+						"properties": [
+							{
+								"id": "unit",
+								"value": "ms"
+							},
+							{
+								"id": "custom.axisPlacement",
+								"value": "right"
+							}
+						]
+					}
+				]
+			},
+			"gridPos": {
+				"h": 8,
+				"w": 12,
+				"x": 0,
+				"y": 23
+			},
+			"id": 9,
+			"options": {
+				"legend": {
+					"calcs": ["min", "median", "max", "mean", "stdDev"],
+					"displayMode": "table",
+					"placement": "bottom",
+					"showLegend": true
+				},
+				"tooltip": {
+					"hideZeros": false,
+					"mode": "multi",
+					"sort": "none"
+				}
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"alias": "Gas Used",
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT DATE_BIN(INTERVAL '1 second', time) AS time, AVG(value) AS \"Gas Used\" FROM \"ethereum_gas_used\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '1 second', time) ORDER BY time ASC",
+					"refId": "A",
+					"resultFormat": "time_series"
+				},
+				{
+					"alias": "Time to Mine",
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"hide": false,
+					"rawQuery": true,
+					"rawSql": "SELECT DATE_BIN(INTERVAL '1 second', time) AS time, AVG(value) AS \"Time to Mine\" FROM \"ethereum_time_to_mine\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '1 second', time) ORDER BY time ASC",
+					"refId": "B",
+					"resultFormat": "time_series"
+				}
+			],
+			"title": "Gas Usage vs Time to Mine",
+			"type": "timeseries"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "List of blocks with transaction count, gas used, and block production time",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "thresholds"
+					},
+					"custom": {
+						"align": "auto",
+						"cellOptions": {
+							"type": "auto"
+						},
+						"footer": {
+							"reducers": []
+						},
+						"inspect": false
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							}
+						]
+					}
+				},
+				"overrides": [
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "Gas Used"
+						},
+						"properties": [
+							{
+								"id": "unit",
+								"value": "sishort"
+							},
+							{
+								"id": "decimals",
+								"value": 2
+							},
+							{
+								"id": "custom.width",
+								"value": 120
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "Block Time (ms)"
+						},
+						"properties": [
+							{
+								"id": "unit",
+								"value": "ms"
+							},
+							{
+								"id": "decimals",
+								"value": 0
+							}
+						]
+					}
+				]
+			},
+			"gridPos": {
+				"h": 8,
+				"w": 12,
+				"x": 12,
+				"y": 23
+			},
+			"id": 10,
+			"options": {
+				"cellHeight": "sm",
+				"showHeader": true,
+				"sortBy": [
+					{
+						"desc": true,
+						"displayName": "Block Number"
+					}
+				]
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"hide": false,
+					"rawQuery": true,
+					"rawSql": "SELECT time, value AS \"Block Number\" FROM \"ethereum_block_number\" WHERE time >= $__timeFrom AND time <= $__timeTo ORDER BY time DESC",
+					"refId": "A",
+					"resultFormat": "table"
+				},
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"hide": false,
+					"rawQuery": true,
+					"rawSql": "SELECT time, value AS \"Transactions\" FROM \"ethereum_block_transactions\" WHERE time >= $__timeFrom AND time <= $__timeTo ORDER BY time DESC",
+					"refId": "B",
+					"resultFormat": "table"
+				},
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"hide": false,
+					"rawQuery": true,
+					"rawSql": "SELECT time, value AS \"Gas Used\" FROM \"ethereum_gas_used\" WHERE time >= $__timeFrom AND time <= $__timeTo ORDER BY time DESC",
+					"refId": "C",
+					"resultFormat": "table"
+				},
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"hide": false,
+					"rawQuery": true,
+					"rawSql": "SELECT time, value AS \"Block Time (ms)\" FROM \"ethereum_block_time\" WHERE time >= $__timeFrom AND time <= $__timeTo ORDER BY time DESC",
+					"refId": "D",
+					"resultFormat": "table"
+				}
+			],
+			"title": "Block Details Table",
+			"transformations": [
+				{
+					"id": "merge",
+					"options": {}
+				}
+			],
+			"type": "table"
+		},
+		{
+			"collapsed": false,
+			"gridPos": {
+				"h": 1,
+				"w": 24,
+				"x": 0,
+				"y": 31
+			},
+			"id": 107,
+			"panels": [],
+			"title": "Node Health Monitoring",
+			"type": "row"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "palette-classic"
+					},
+					"custom": {
+						"axisBorderShow": false,
+						"axisCenteredZero": false,
+						"axisColorMode": "text",
+						"axisLabel": "",
+						"axisPlacement": "auto",
+						"barAlignment": 0,
+						"barWidthFactor": 0.6,
+						"drawStyle": "line",
+						"fillOpacity": 0,
+						"gradientMode": "none",
+						"hideFrom": {
+							"legend": false,
+							"tooltip": false,
+							"viz": false
+						},
+						"insertNulls": 10000,
+						"lineInterpolation": "linear",
+						"lineWidth": 1,
+						"pointSize": 5,
+						"scaleDistribution": {
+							"type": "linear"
+						},
+						"showPoints": "auto",
+						"showValues": false,
+						"spanNulls": false,
+						"stacking": {
+							"group": "A",
+							"mode": "none"
+						},
+						"thresholdsStyle": {
+							"mode": "off"
+						}
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							},
+							{
+								"color": "red",
+								"value": 80
+							}
+						]
+					},
+					"unit": "ms"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 15,
+				"w": 17,
+				"x": 0,
+				"y": 32
+			},
+			"id": 105,
+			"options": {
+				"legend": {
+					"calcs": ["min", "median", "max", "mean", "stdDev"],
+					"displayMode": "list",
+					"placement": "bottom",
+					"showLegend": true
+				},
+				"tooltip": {
+					"hideZeros": false,
+					"mode": "single",
+					"sort": "none"
+				}
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT time, endpoint, value FROM \"ethereum_req_duration\" WHERE time >= $__timeFrom AND time <= $__timeTo ORDER BY time ASC",
+					"refId": "A",
+					"resultFormat": "time_series"
+				}
+			],
+			"title": "RPC routes latency",
+			"type": "timeseries"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "Rate of block production showing blockchain liveness and consistency",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "palette-classic"
+					},
+					"custom": {
+						"axisBorderShow": false,
+						"axisCenteredZero": false,
+						"axisColorMode": "text",
+						"axisLabel": "",
+						"axisPlacement": "auto",
+						"barAlignment": 0,
+						"barWidthFactor": 0.6,
+						"drawStyle": "line",
+						"fillOpacity": 20,
+						"gradientMode": "none",
+						"hideFrom": {
+							"legend": false,
+							"tooltip": false,
+							"viz": false
+						},
+						"insertNulls": 10000,
+						"lineInterpolation": "smooth",
+						"lineWidth": 2,
+						"pointSize": 5,
+						"scaleDistribution": {
+							"type": "linear"
+						},
+						"showPoints": "never",
+						"showValues": false,
+						"spanNulls": false,
+						"stacking": {
+							"group": "A",
+							"mode": "none"
+						},
+						"thresholdsStyle": {
+							"mode": "off"
+						}
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							}
+						]
+					},
+					"unit": "short"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 7,
+				"w": 7,
+				"x": 17,
+				"y": 32
+			},
+			"id": 2,
+			"options": {
+				"legend": {
+					"calcs": ["mean", "max", "last"],
+					"displayMode": "table",
+					"placement": "bottom",
+					"showLegend": true
+				},
+				"tooltip": {
+					"hideZeros": false,
+					"mode": "single",
+					"sort": "none"
+				}
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT DATE_BIN(INTERVAL '1 second', time) AS time, SUM(value) AS \"Blocks/s\" FROM \"ethereum_block_count\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '1 second', time) ORDER BY time ASC",
+					"refId": "A",
+					"resultFormat": "time_series"
+				}
+			],
+			"title": "Block Production Rate",
+			"type": "timeseries"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "Gas used per block showing block capacity utilization",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "palette-classic"
+					},
+					"custom": {
+						"axisBorderShow": false,
+						"axisCenteredZero": false,
+						"axisColorMode": "text",
+						"axisLabel": "",
+						"axisPlacement": "auto",
+						"barAlignment": 0,
+						"barWidthFactor": 0.6,
+						"drawStyle": "line",
+						"fillOpacity": 30,
+						"gradientMode": "none",
+						"hideFrom": {
+							"legend": false,
+							"tooltip": false,
+							"viz": false
+						},
+						"insertNulls": 10000,
+						"lineInterpolation": "smooth",
+						"lineWidth": 2,
+						"pointSize": 5,
+						"scaleDistribution": {
+							"type": "linear"
+						},
+						"showPoints": "never",
+						"showValues": false,
+						"spanNulls": false,
+						"stacking": {
+							"group": "A",
+							"mode": "none"
+						},
+						"thresholdsStyle": {
+							"mode": "off"
+						}
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							}
+						]
+					},
+					"unit": "short"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 8,
+				"w": 7,
+				"x": 17,
+				"y": 39
+			},
+			"id": 6,
+			"options": {
+				"legend": {
+					"calcs": ["min", "median", "max", "mean", "stdDev"],
+					"displayMode": "table",
+					"placement": "bottom",
+					"showLegend": true
+				},
+				"tooltip": {
+					"hideZeros": false,
+					"mode": "single",
+					"sort": "none"
+				}
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT DATE_BIN(INTERVAL '1 second', time) AS time, AVG(value) AS \"mean\" FROM \"ethereum_gas_used\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '1 second', time) ORDER BY time ASC",
+					"refId": "A",
+					"resultFormat": "time_series"
+				},
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"hide": false,
+					"rawQuery": true,
+					"rawSql": "SELECT DATE_BIN(INTERVAL '1 second', time) AS time, MAX(value) AS \"max\" FROM \"ethereum_gas_used\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '1 second', time) ORDER BY time ASC",
+					"refId": "B",
+					"resultFormat": "time_series"
+				}
+			],
+			"title": "Gas Used Per Block",
+			"type": "timeseries"
+		},
+		{
+			"collapsed": false,
+			"gridPos": {
+				"h": 1,
+				"w": 24,
+				"x": 0,
+				"y": 47
+			},
+			"id": 106,
+			"panels": [],
+			"title": "K6 sanity check",
+			"type": "row"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "Dropped iterations per second (5s buckets) to track saturation of arrival-rate executors",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "palette-classic"
+					},
+					"custom": {
+						"axisBorderShow": false,
+						"axisCenteredZero": false,
+						"axisColorMode": "text",
+						"axisLabel": "",
+						"axisPlacement": "auto",
+						"barAlignment": 0,
+						"barWidthFactor": 0.6,
+						"drawStyle": "line",
+						"fillOpacity": 10,
+						"gradientMode": "none",
+						"hideFrom": {
+							"legend": false,
+							"tooltip": false,
+							"viz": false
+						},
+						"insertNulls": 10000,
+						"lineInterpolation": "smooth",
+						"lineWidth": 2,
+						"pointSize": 5,
+						"scaleDistribution": {
+							"type": "linear"
+						},
+						"showPoints": "never",
+						"showValues": false,
+						"spanNulls": false,
+						"stacking": {
+							"group": "A",
+							"mode": "none"
+						},
+						"thresholdsStyle": {
+							"mode": "off"
+						}
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							},
+							{
+								"color": "red",
+								"value": 80
+							}
+						]
+					},
+					"unit": "tps"
+				},
+				"overrides": [
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "p50"
+						},
+						"properties": [
+							{
+								"id": "color",
+								"value": {
+									"fixedColor": "green",
+									"mode": "fixed"
+								}
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "p95"
+						},
+						"properties": [
+							{
+								"id": "color",
+								"value": {
+									"fixedColor": "yellow",
+									"mode": "fixed"
+								}
+							}
+						]
+					},
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "p99"
+						},
+						"properties": [
+							{
+								"id": "color",
+								"value": {
+									"fixedColor": "red",
+									"mode": "fixed"
+								}
+							}
+						]
+					}
+				]
+			},
+			"gridPos": {
+				"h": 8,
+				"w": 12,
+				"x": 0,
+				"y": 48
+			},
+			"id": 18,
+			"options": {
+				"legend": {
+					"calcs": ["mean", "max", "last"],
+					"displayMode": "table",
+					"placement": "bottom",
+					"showLegend": true
+				},
+				"tooltip": {
+					"hideZeros": false,
+					"mode": "multi",
+					"sort": "none"
+				}
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT DATE_BIN(INTERVAL '5 seconds', time) AS time, SUM(value) / 5 AS \"Dropped iters/s\" FROM \"dropped_iterations\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '5 seconds', time) ORDER BY time ASC",
+					"refId": "A",
+					"resultFormat": "time_series"
+				}
+			],
+			"title": "Dropped Iterations Rate",
+			"type": "timeseries"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "RPC errors per second grouped by method - indicates issues with blockchain interactions",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "palette-classic"
+					},
+					"custom": {
+						"axisBorderShow": false,
+						"axisCenteredZero": false,
+						"axisColorMode": "text",
+						"axisLabel": "",
+						"axisPlacement": "auto",
+						"barAlignment": 0,
+						"barWidthFactor": 0.6,
+						"drawStyle": "line",
+						"fillOpacity": 10,
+						"gradientMode": "none",
+						"hideFrom": {
+							"legend": false,
+							"tooltip": false,
+							"viz": false
+						},
+						"insertNulls": 10000,
+						"lineInterpolation": "smooth",
+						"lineWidth": 2,
+						"pointSize": 5,
+						"scaleDistribution": {
+							"type": "linear"
+						},
+						"showPoints": "never",
+						"showValues": false,
+						"spanNulls": false,
+						"stacking": {
+							"group": "A",
+							"mode": "none"
+						},
+						"thresholdsStyle": {
+							"mode": "off"
+						}
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							},
+							{
+								"color": "red",
+								"value": 1
+							}
+						]
+					},
+					"unit": "short"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 8,
+				"w": 12,
+				"x": 12,
+				"y": 48
+			},
+			"id": 19,
+			"options": {
+				"legend": {
+					"calcs": ["sum", "mean", "max"],
+					"displayMode": "table",
+					"placement": "bottom",
+					"showLegend": true
+				},
+				"tooltip": {
+					"hideZeros": false,
+					"mode": "multi",
+					"sort": "none"
+				}
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT DATE_BIN(INTERVAL '5 second', time) AS time, method::STRING AS method, SUM(value) / 5 AS \"value\" FROM \"ethereum_errors\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY DATE_BIN(INTERVAL '5 second', time), method ORDER BY time ASC",
+					"refId": "A",
+					"resultFormat": "table"
+				}
+			],
+			"title": "Error Rate by Method",
+			"transformations": [
+				{
+					"id": "renameByRegex",
+					"options": {
+						"regex": "value",
+						"renamePattern": "Errors/s"
+					}
+				},
+				{
+					"id": "prepareTimeSeries",
+					"options": {
+						"format": "many"
+					}
+				},
+				{
+					"id": "renameByRegex",
+					"options": {
+						"regex": "Errors/s (.+)",
+						"renamePattern": "$1"
+					}
+				}
+			],
+			"type": "timeseries"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
+			"description": "Breakdown of errors by RPC method and error reason",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "thresholds"
+					},
+					"custom": {
+						"align": "auto",
+						"cellOptions": {
+							"type": "auto"
+						},
+						"footer": {
+							"reducers": ["sum"]
+						},
+						"inspect": false
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							},
+							{
+								"color": "red",
+								"value": 1
+							}
+						]
+					}
+				},
+				"overrides": [
+					{
+						"matcher": {
+							"id": "byName",
+							"options": "Count"
+						},
+						"properties": [
+							{
+								"id": "custom.width",
+								"value": 80
+							}
+						]
+					}
+				]
+			},
+			"gridPos": {
+				"h": 8,
+				"w": 24,
+				"x": 0,
+				"y": 56
+			},
+			"id": 20,
+			"options": {
+				"cellHeight": "sm",
+				"showHeader": true,
+				"sortBy": [
+					{
+						"desc": true,
+						"displayName": "Count"
+					}
+				]
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT method, reason, SUM(value) AS \"Count\" FROM \"ethereum_errors\" WHERE time >= $__timeFrom AND time <= $__timeTo GROUP BY method, reason",
+					"refId": "A",
+					"resultFormat": "table"
+				}
+			],
+			"title": "Error Breakdown by Method and Reason",
+			"transformations": [
+				{
+					"id": "organize",
+					"options": {
+						"excludeByName": {
+							"Time": true
+						},
+						"includeByName": {},
+						"indexByName": {
+							"Count": 2,
+							"Time": 0,
+							"method": 0,
+							"reason": 1
+						},
+						"renameByName": {
+							"method": "Method",
+							"reason": "Reason"
+						}
+					}
+				}
+			],
+			"type": "table"
+		}
+	],
+	"preload": false,
+	"refresh": "5s",
+	"schemaVersion": 42,
+	"tags": ["blockchain", "ethereum", "k6", "performance"],
+	"templating": {
+		"list": [
+			{
+				"baseFilters": [],
+				"datasource": {
+					"type": "influxdb",
+					"uid": "P951FEA4DE68E13C5"
+				},
+				"description": "Filter InfluxDB data source",
+				"filters": [],
+				"name": "Filter",
+				"type": "adhoc"
+			}
+		]
+	},
+	"time": {
+		"from": "now-15m",
+		"to": "now"
+	},
+	"timepicker": {},
+	"timezone": "",
+	"title": "Blockchain Benchmarks",
+	"uid": "blockchain_benchmarks_v2",
+	"version": 28
+}

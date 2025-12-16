@@ -1,0 +1,32 @@
+{
+  "lib/fhevm": {
+    "rev": "b30eda16cefedabe79a92df8f6f742b18a55be70"
+  },
+  "lib/forge-std": {
+    "tag": {
+      "name": "v1.12.0",
+      "rev": "7117c90c8cf6c68e5acce4f09a6b24715cea4de6"
+    }
+  },
+  "lib/multicall3": {
+    "tag": {
+      "name": "v3.1.0",
+      "rev": "a1fa0644fa412cd3237ef7081458ecb2ffad7dbe"
+    }
+  },
+  "lib/openzeppelin-contracts": {
+    "tag": {
+      "name": "v5.5.0",
+      "rev": "fcbae5394ae8ad52d8e580a3477db99814b9d565"
+    }
+  },
+  "lib/openzeppelin-contracts-upgradeable": {
+    "rev": "3d5fa5c24c411112bab47bec25cfa9ad0af0e6e8"
+  },
+  "lib/optimism": {
+    "tag": {
+      "name": "v1.16.3",
+      "rev": "478b8bda4e30cc4feb587d7d722168264425a564"
+    }
+  }
+}

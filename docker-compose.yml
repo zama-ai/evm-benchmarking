@@ -1,0 +1,45 @@
+networks:
+  gateway-benchmarks:
+    driver: bridge
+
+services:
+  influxdb:
+    image: influxdb:3-core
+    container_name: influxdb
+    networks:
+      - gateway-benchmarks
+    ports:
+      - 8086:8086
+    command:
+      - influxdb3
+      - serve
+      - --node-id=node0
+      - --object-store=file
+      - --data-dir=/var/lib/influxdb3/data
+      - --http-bind=0.0.0.0:8086
+      - --without-auth
+    volumes:
+      - influxdb_data:/var/lib/influxdb3
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    networks:
+      - gateway-benchmarks
+    ports:
+      - 3000:3000
+    environment:
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+    volumes:
+      - ./grafana:/etc/grafana/provisioning/
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - influxdb
+    restart: unless-stopped
+
+volumes:
+  influxdb_data:
+  grafana_data:
