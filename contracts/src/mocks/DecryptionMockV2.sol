@@ -21,7 +21,6 @@ import {BenchmarkGasUtils} from "./BenchmarkGasUtils.sol";
  *   - No EIP712 signature validation. Assumed to be done by Centralized Gateway.
  *   - No consensus mechanism overhead (single response completes the request)
  *   - Simplified storage layout
- *   - Caller-provided decryptionId for predictable benchmarking
  */
 contract DecryptionMockV2 {
     // ======================= ENUMS =======================
