@@ -436,7 +436,7 @@
 			},
 			"gridPos": {
 				"h": 4,
-				"w": 4,
+				"w": 3,
 				"x": 0,
 				"y": 9
 			},
@@ -501,8 +501,8 @@
 			},
 			"gridPos": {
 				"h": 4,
-				"w": 4,
-				"x": 4,
+				"w": 3,
+				"x": 3,
 				"y": 9
 			},
 			"id": 109,
@@ -542,6 +542,71 @@
 				"type": "influxdb",
 				"uid": "P951FEA4DE68E13C5"
 			},
+			"description": "Total number of transactions processed in the selected time range",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "thresholds"
+					},
+					"mappings": [],
+					"thresholds": {
+						"mode": "absolute",
+						"steps": [
+							{
+								"color": "green",
+								"value": 0
+							}
+						]
+					},
+					"unit": "short"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 6,
+				"y": 9
+			},
+			"id": 112,
+			"options": {
+				"colorMode": "value",
+				"graphMode": "area",
+				"justifyMode": "auto",
+				"orientation": "auto",
+				"percentChangeColorMode": "standard",
+				"reduceOptions": {
+					"calcs": ["sum"],
+					"fields": "",
+					"values": false
+				},
+				"showPercentChange": false,
+				"textMode": "auto",
+				"wideLayout": true
+			},
+			"pluginVersion": "12.3.0",
+			"targets": [
+				{
+					"datasource": {
+						"type": "influxdb",
+						"uid": "P951FEA4DE68E13C5"
+					},
+					"editorMode": "code",
+					"format": "table",
+					"rawQuery": true,
+					"rawSql": "SELECT SUM(value) AS \"Total\" FROM \"ethereum_block_transactions\" WHERE time >= $__timeFrom AND time <= $__timeTo",
+					"refId": "A",
+					"resultFormat": "time_series"
+				}
+			],
+			"title": "Total Transactions",
+			"type": "stat"
+		},
+		{
+			"datasource": {
+				"type": "influxdb",
+				"uid": "P951FEA4DE68E13C5"
+			},
 			"description": "95th percentile time to mine - critical for SLA compliance",
 			"fieldConfig": {
 				"defaults": {
@@ -572,8 +637,8 @@
 			},
 			"gridPos": {
 				"h": 4,
-				"w": 4,
-				"x": 8,
+				"w": 3,
+				"x": 10,
 				"y": 9
 			},
 			"id": 16,
@@ -638,7 +703,7 @@
 			"gridPos": {
 				"h": 4,
 				"w": 4,
-				"x": 12,
+				"x": 13,
 				"y": 9
 			},
 			"id": 14,
@@ -711,7 +776,7 @@
 			"gridPos": {
 				"h": 4,
 				"w": 4,
-				"x": 16,
+				"x": 17,
 				"y": 9
 			},
 			"id": 13,
@@ -773,8 +838,8 @@
 			},
 			"gridPos": {
 				"h": 4,
-				"w": 4,
-				"x": 20,
+				"w": 3,
+				"x": 21,
 				"y": 9
 			},
 			"id": 17,

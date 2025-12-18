@@ -41,16 +41,11 @@ const CONSENSUS_THRESHOLD = Number.parseInt(
 	__ENV.CONSENSUS_THRESHOLD || "2",
 	10,
 );
-const PAYLOAD_SIZE_BYTES = Number.parseInt(
-	__ENV.PAYLOAD_SIZE_BYTES || "355",
-	10,
-);
-
-console.log("PAYLOAD_SIZE_BYTES", PAYLOAD_SIZE_BYTES);
+const PAYLOAD_SIZE_BYTES = 355;
 
 // ======================= TEST OPTIONS =======================
 
-export const options = getScenarios("public-decrypt");
+export const options = getScenarios("public-decrypt-response");
 
 let vuClient: Client | null = null;
 let vuContract: Contract | null = null;

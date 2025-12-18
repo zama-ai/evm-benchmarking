@@ -137,8 +137,8 @@ export function getScenarios(
 			block_monitor: {
 				executor: "shared-iterations",
 				exec: "monitor",
-				maxDuration: `${monitorDuration + (monitorDuration < 10 ? 0 : 10)}s`,
-				vus: 1,
+				maxDuration: `${CONFIG.duration + (CONFIG.duration < 10 ? 0 : 20)}s`,
+				VUs: 1,
 			},
 		},
 	};

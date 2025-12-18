@@ -45,7 +45,7 @@ const PAYLOAD_SIZE_BYTES =
 
 // ======================= TEST OPTIONS =======================
 
-export const options = getScenarios("user-decrypt");
+export const options = getScenarios("user-decrypt-response");
 
 let vuClient: Client | null = null;
 let vuContract: Contract | null = null;
