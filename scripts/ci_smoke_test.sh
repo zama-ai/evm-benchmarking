@@ -149,8 +149,8 @@ declare -a tests=(
 	"Arbitrary Execution Events (Smoke, Batch=1)|scripts/arbitrary-execution.ts|N_EVENTS=100 BATCH_SIZE=1"
 	"Arbitrary Execution Calldata (Smoke, Batch=1)|scripts/arbitrary-execution.ts|CALLDATA_SIZE=1000 BATCH_SIZE=1"
 	"Arbitrary Execution Burn Gas (Smoke, Batch=1)|scripts/arbitrary-execution.ts|BURN_GAS=10000 BATCH_SIZE=1"
-	"User Decrypt (Smoke, Batch=1)|scripts/user-decrypt.ts|BATCH_SIZE=1 CONSENSUS_THRESHOLD=2 PAYLOAD_SIZE_BYTES=64"
-	"User Decrypt (Smoke, Batch=3)|scripts/user-decrypt.ts|BATCH_SIZE=3 CONSENSUS_THRESHOLD=2 PAYLOAD_SIZE_BYTES=64"
+	"User Decrypt (Smoke, Batch=1)|scripts/user-decrypt-response.ts|BATCH_SIZE=1 CONSENSUS_THRESHOLD=2 PAYLOAD_SIZE_BYTES=64"
+	"User Decrypt (Smoke, Batch=3)|scripts/user-decrypt-response.ts|BATCH_SIZE=3 CONSENSUS_THRESHOLD=2 PAYLOAD_SIZE_BYTES=64"
 	"Allow Public Decrypt (Smoke, Batch=1)|scripts/allow-public-decrypt.ts|BATCH_SIZE=1 CONSENSUS_THRESHOLD=2"
 	"Allow Public Decrypt (Smoke, Batch=3)|scripts/allow-public-decrypt.ts|BATCH_SIZE=3 CONSENSUS_THRESHOLD=2"
 )
