@@ -33,10 +33,14 @@ interface SetupData {
 
 const ACCOUNTS_FILE = (__ENV.ACCOUNTS_FILE as string) || null;
 const CONTRACT_ADDRESS = (__ENV.CONTRACT_ADDRESS as string) || null;
-const CONSENSUS_THRESHOLD =
-	Number.parseInt(__ENV.CONSENSUS_THRESHOLD as string, 10) || 2;
-const PAYLOAD_SIZE_BYTES =
-	Number.parseInt((__ENV.PAYLOAD_SIZE_BYTES || "1300") as string, 10) || 1300;
+const CONSENSUS_THRESHOLD = Number.parseInt(
+	__ENV.CONSENSUS_THRESHOLD || "2",
+	10,
+);
+const PAYLOAD_SIZE_BYTES = Number.parseInt(
+	__ENV.PAYLOAD_SIZE_BYTES || "355",
+	10,
+);
 
 console.log("PAYLOAD_SIZE_BYTES", PAYLOAD_SIZE_BYTES);
 
