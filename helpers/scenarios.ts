@@ -89,7 +89,7 @@ export function getScenarios(scriptName: string) {
 			block_monitor: {
 				executor: "shared-iterations",
 				exec: "monitor",
-				maxDuration: `${CONFIG.duration + (CONFIG.duration < 10 ? 0 : 10)}s`,
+				maxDuration: `${CONFIG.duration + (CONFIG.duration < 10 ? 0 : 30)}s`,
 				VUs: 1,
 			},
 		},
