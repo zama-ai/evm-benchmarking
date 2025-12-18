@@ -16,8 +16,6 @@ remappings = [
   "fhevm/=lib/fhevm/",
   "@multicall3=lib/multicall3/src",
   "forge-std/=lib/forge-std/src/",
-  "@optimism-bedrock/=lib/optimism/packages/contracts-bedrock/src/",
-  "src/libraries/=lib/optimism/packages/contracts-bedrock/src/libraries/",
 ]
 
 # Test directory
