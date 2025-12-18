@@ -1214,16 +1214,19 @@ func (bm *BlockMonitor) ProcessBlockEvent() {
 func (bm *BlockMonitor) handleBlockHeader(header *types.Header) {
 	const millisecondsPerSecond = 1000.0
 
-	now := time.Now()
+	// Use block number as nanoseconds to ensure unique timestamps when multiple blocks share
+	// the same second-level timestamp. Block timestamps are only second-granular, but InfluxDB
+	// uses timestamp+tags as unique identifiers, causing data point overwrites without this.
+	headerTimestamp := time.Unix(int64(header.Time), int64(header.Number.Uint64()%1_000_000_000)) //nolint:gosec // don't care about overflow
 
 	if bm.lastBlockTime.IsZero() {
-		bm.lastBlockTime = now
+		bm.lastBlockTime = headerTimestamp
 
 		return
 	}
 
-	timeDelta := now.Sub(bm.lastBlockTime)
-	bm.lastBlockTime = now
+	timeDelta := headerTimestamp.Sub(bm.lastBlockTime)
+	bm.lastBlockTime = headerTimestamp
 
 	// Get full block to count transactions.
 	startTime := time.Now()
@@ -1254,10 +1257,10 @@ func (bm *BlockMonitor) handleBlockHeader(header *types.Header) {
 	// Calculate user operations and block time.
 	blockTimeMs := timeDelta.Seconds() * millisecondsPerSecond
 
-	bm.emitBlockMetrics(block, userTxCount, blockTimeMs, now)
+	bm.emitBlockMetrics(block, userTxCount, blockTimeMs, headerTimestamp)
 }
 
-func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, blockTimeMs float64, now time.Time) {
+func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, blockTimeMs float64, blockTimestamp time.Time) {
 	if bm.client.vu == nil {
 		return
 	}
@@ -1277,7 +1280,7 @@ func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, bl
 				Tags:   rootTS,
 			},
 			Value: float64(1),
-			Time:  now,
+			Time:  blockTimestamp,
 		},
 		{
 			TimeSeries: metrics.TimeSeries{
@@ -1285,7 +1288,7 @@ func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, bl
 				Tags:   rootTS,
 			},
 			Value: float64(block.NumberU64()),
-			Time:  now,
+			Time:  blockTimestamp,
 		},
 		{
 			TimeSeries: metrics.TimeSeries{
@@ -1293,7 +1296,7 @@ func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, bl
 				Tags:   rootTS,
 			},
 			Value: float64(userTxCount),
-			Time:  now,
+			Time:  blockTimestamp,
 		},
 		{
 			TimeSeries: metrics.TimeSeries{
@@ -1301,7 +1304,7 @@ func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, bl
 				Tags:   rootTS,
 			},
 			Value: float64(block.GasUsed()),
-			Time:  now,
+			Time:  blockTimestamp,
 		},
 		{
 			TimeSeries: metrics.TimeSeries{
@@ -1309,7 +1312,7 @@ func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, bl
 				Tags:   rootTS,
 			},
 			Value: userOps,
-			Time:  now,
+			Time:  blockTimestamp,
 		},
 		{
 			TimeSeries: metrics.TimeSeries{
@@ -1317,14 +1320,14 @@ func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, bl
 				Tags:   rootTS,
 			},
 			Value: blockTimeMs,
-			Time:  now,
+			Time:  blockTimestamp,
 		},
 	}
 
 	connectedSamples := metrics.ConnectedSamples{
 		Samples: samples,
 		Tags:    rootTS,
-		Time:    now,
+		Time:    blockTimestamp,
 	}
 
 	metrics.PushIfNotDone(bm.client.vu.Context(), bm.client.vu.State().Samples, connectedSamples)
