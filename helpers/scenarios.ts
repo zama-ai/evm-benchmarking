@@ -61,7 +61,6 @@ export function getScenarios(
 	};
 
 	let mainScenario: Record<string, unknown>;
-	let monitorDuration: number;
 
 	if (SCENARIO_TYPE === "shared-iterations") {
 		if (effectiveIterations <= 0) {
@@ -75,7 +74,6 @@ export function getScenarios(
 			vus: NUM_VUS,
 			maxDuration: `${MAX_DURATION}s`,
 		};
-		monitorDuration = MAX_DURATION;
 	} else if (SCENARIO_TYPE === "stress") {
 		mainScenario = {
 			...baseArrivalRateScenario,
@@ -88,7 +86,6 @@ export function getScenarios(
 				},
 			],
 		};
-		monitorDuration = CONFIG.duration;
 	} else if (SCENARIO_TYPE === "load") {
 		mainScenario = {
 			...baseArrivalRateScenario,
@@ -96,7 +93,6 @@ export function getScenarios(
 			duration: `${CONFIG.duration}s`,
 			rate: EFFECTIVE_RATE,
 		};
-		monitorDuration = CONFIG.duration;
 	} else {
 		throw new Error(`Invalid scenario type: ${SCENARIO_TYPE}`);
 	}

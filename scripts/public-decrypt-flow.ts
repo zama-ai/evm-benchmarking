@@ -17,9 +17,6 @@ const CONTRACT_BIN = String(
 // Number of ciphertext handles per request (mirrored from real tx)
 const NUM_CT_HANDLES = 2;
 
-// Size of decrypted payload in bytes (response data)
-const PAYLOAD_SIZE_BYTES = 355;
-
 // ======================= TEST OPTIONS =======================
 
 export const options = getScenarios("public-decrypt-flow");
@@ -37,11 +34,9 @@ interface SetupData {
 // ======================= SETUP =======================
 
 export function setup(): SetupData {
-	console.log("Public Decryption Flow Benchmark");
+	console.log("Public Decryption Request Benchmark (Request-Only)");
 	console.log(`CT handles per request: ${NUM_CT_HANDLES}`);
-	console.log(`Payload size: ${PAYLOAD_SIZE_BYTES} bytes`);
 
-	// Deploy contract - deployer becomes the aggregator
 	console.log("Deploying DecryptionMockV2 contract...");
 	const receipt = vuClient.deployContract(CONTRACT_ABI, CONTRACT_BIN);
 	if (receipt.status !== 1) {
@@ -82,7 +77,7 @@ function generateCtHandles(): string[] {
 export default function ({ contractAddress, gasPrice }: SetupData): void {
 	const contract = vuClient.newContract(contractAddress, CONTRACT_ABI);
 
-	// Step 1: Send request transaction
+	// Send request transaction
 	const ctHandles = generateCtHandles();
 	const requestCallData = contract.encodeABI(
 		"publicDecryptionRequest",
@@ -99,32 +94,6 @@ export default function ({ contractAddress, gasPrice }: SetupData): void {
 	if (requestReceipt.status !== 1) {
 		fail(`Request transaction failed with status: ${requestReceipt.status}`);
 	}
-
-	// Extract decryptionId from event logs
-	const decryptionIdEmitted = requestReceipt.logs[0]?.topics[1];
-	if (!decryptionIdEmitted) {
-		fail("DecryptionId not found in event");
-	}
-	const decryptionId = BigInt(decryptionIdEmitted);
-
-	// Step 2: Send response transaction (only aggregator can call this)
-	const decryptedResult = `0x${"ff".repeat(PAYLOAD_SIZE_BYTES)}`;
-	const responseCallData = contract.encodeABI(
-		"publicDecryptionResponse",
-		decryptionId,
-		decryptedResult,
-		"0x00",
-	);
-	const responseReceipt = vuClient.sendTransactionSync({
-		to: contractAddress,
-		input: responseCallData,
-		gasPrice: gasPrice,
-		gas: 500_000,
-		value: 0,
-	});
-	if (responseReceipt.status !== 1) {
-		fail(`Response transaction failed with status: ${responseReceipt.status}`);
-	}
 }
 
 export function monitor() {
@@ -136,10 +105,9 @@ export function monitor() {
 export function handleSummary(
 	data: Record<string, unknown>,
 ): Record<string, string> {
-	console.log("=== PUBLIC DECRYPTION FLOW BENCHMARK SUMMARY ===");
-	console.log("Each iteration = 1 request tx + 1 response tx (2 tx total)");
+	console.log("=== PUBLIC DECRYPTION REQUEST BENCHMARK SUMMARY ===");
+	console.log("Each iteration = 1 request tx");
 	console.log(`CT handles per request: ${NUM_CT_HANDLES}`);
-	console.log(`Payload size: ${PAYLOAD_SIZE_BYTES} bytes`);
 
 	return {
 		stdout: textSummary(data, { indent: " ", enableColors: true }),
