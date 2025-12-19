@@ -6,25 +6,25 @@ import {
     USER_DECRYPT_COUNTER_BASE
 } from "@gateway-contracts/shared/KMSRequestCounters.sol";
 import {BenchmarkGasUtils} from "./BenchmarkGasUtils.sol";
+import {Decryption} from "@gateway-contracts/Decryption.sol";
+import {IDecryption} from "@gateway-contracts/interfaces/IDecryption.sol";
+import {SnsCiphertextMaterial, CtHandleContractPair} from "@gateway-contracts/shared/Structs.sol";
 
 /**
  * @title DecryptionMockV2
- * @notice Simplified 2-state decryption flow for throughput benchmarking
+ * @notice Simplified 2-state mock decryption flow for throughput benchmarking
  * @dev Implements a trusted response pattern without ACL checks.
  *      Supports both Public and User decryption flows with minimal overhead.
  *
+ *      REQUEST FUNCTIONS: Match the real Decryption.sol signatures exactly
+ *      RESPONSE FUNCTIONS: Simplified "GatewayV2" approach with single aggregator
+ *
  * State machine for each request:
  *   NOT_REQUESTED -> REQUESTED -> DONE
+ *   This supports eventual future FINALIZED state for public, auditable proof of response correctness.
  *
- * Gas optimizations vs Decryption.sol:
- *   - No ACL checks. Assumed to be done by Centralized Gateway.
- *   - No EIP712 signature validation. Assumed to be done by Centralized Gateway.
- *   - No consensus mechanism overhead (single response completes the request)
- *   - Simplified storage layout
  */
 contract DecryptionMockV2 {
-    // ======================= ENUMS =======================
-
     enum RequestStatus {
         NOT_REQUESTED,
         REQUESTED,
@@ -43,44 +43,18 @@ contract DecryptionMockV2 {
     uint256 public userDecryptionCounter;
 
     /// @notice Status of each decryption request
-    mapping(uint256 => RequestStatus) public requestStatus;
+    mapping(uint256 decryptionId => RequestStatus status) public requestStatus;
 
-    /// @notice Stored ciphertext handles for each public decryption request
-    mapping(uint256 => bytes32[]) internal _publicCtHandles;
+    /// @notice Handles of the ciphertexts requested for a public decryption
+    mapping(uint256 decryptionId => bytes32[] ctHandles) publicCtHandles;
 
     /// @notice Stored payload for each user decryption request (publicKey + ctHandles)
-    mapping(uint256 => UserDecryptionPayload) internal _userDecryptionPayloads;
+    mapping(uint256 decryptionId => Decryption.UserDecryptionPayload payload) internal userDecryptionPayloads;
 
-    /// @notice Commitment hash for each completed decryption (for future verification)
-    mapping(uint256 => bytes32) public responseCommitments;
+    /// @notice Commitment hash for each completed decryption (for auditability)
+    mapping(uint256 decryptionId => bytes32 commitment) public responseCommitments;
 
-    // ======================= STRUCTS =======================
-
-    /**
-     * @notice The publicKey and ctHandles from user decryption requests
-     * @dev Mirrors Decryption.sol structure
-     */
-    struct UserDecryptionPayload {
-        bytes publicKey;
-        bytes32[] ctHandles;
-    }
-
-    // ======================= EVENTS =======================
-    // Event signatures match IDecryption.sol where applicable
-
-    /**
-     * @notice Emitted when a public decryption request is made
-     * @param decryptionId The decryption request ID
-     * @param ctHandles The handles of the ciphertexts to decrypt
-     * @param extraData Generic bytes metadata
-     */
-    event PublicDecryptionRequest(
-        uint256 indexed decryptionId,
-        bytes32[] ctHandles,
-        bytes extraData
-    );
-
-    /**
+        /**
      * @notice Emitted when a public decryption response completes the request
      * @param decryptionId The decryption request ID
      * @param decryptedResult The decrypted result
@@ -89,34 +63,6 @@ contract DecryptionMockV2 {
     event PublicDecryptionResponse(
         uint256 indexed decryptionId,
         bytes decryptedResult,
-        bytes extraData
-    );
-
-    /**
-     * @notice Emitted when a user decryption request is made
-     * @param decryptionId The decryption request ID
-     * @param ctHandles The handles of the ciphertexts to decrypt
-     * @param userAddress The user's address
-     * @param publicKey The user's public key for reencryption
-     * @param extraData Generic bytes metadata
-     */
-    event UserDecryptionRequest(
-        uint256 indexed decryptionId,
-        bytes32[] ctHandles,
-        address userAddress,
-        bytes publicKey,
-        bytes extraData
-    );
-
-    /**
-     * @notice Emitted when a user decryption response is received
-     * @param decryptionId The decryption request ID
-     * @param userDecryptedShares Array of decryption shares from all KMS nodes (aggregated by Gateway)
-     * @param extraData Generic bytes metadata
-     */
-    event UserDecryptionResponse(
-        uint256 indexed decryptionId,
-        bytes[] userDecryptedShares,
         bytes extraData
     );
 
@@ -173,11 +119,61 @@ contract DecryptionMockV2 {
         BenchmarkGasUtils.simulateExternalCall();
     }
 
+    // ======================= MOCKED EXTERNAL CALLS =======================
+
+    /**
+     * @notice Mock ACL check for public decryption allowance
+     * @dev Simulates MULTICHAIN_ACL.isPublicDecryptAllowed() external call
+     */
+    function _checkIsPublicDecryptAllowed(bytes32 /* ctHandle */) internal view virtual {
+        BenchmarkGasUtils.simulateExternalCall();
+    }
+
+    /**
+     * @notice Mock ACL check for account allowance
+     * @dev Simulates MULTICHAIN_ACL.isAccountAllowed() external call
+     */
+    function _checkIsAccountAllowed(bytes32 /* ctHandle */, address /* account */) internal view virtual {
+        BenchmarkGasUtils.simulateExternalCall();
+    }
+
+    /**
+     * @notice Mock fetch of SNS ciphertext materials
+     * @dev Simulates CIPHERTEXT_COMMITS.getSnsCiphertextMaterials() external call
+     */
+    function _getSnsCiphertextMaterials(
+        bytes32[] memory ctHandles
+    ) internal view virtual returns (SnsCiphertextMaterial[] memory) {
+        BenchmarkGasUtils.simulateExternalCall();
+
+        SnsCiphertextMaterial[] memory materials = new SnsCiphertextMaterial[](ctHandles.length);
+        for (uint256 i = 0; i < ctHandles.length; i++) {
+            materials[i] = SnsCiphertextMaterial({
+                ctHandle: ctHandles[i],
+                keyId: 0,
+                snsCiphertextDigest: bytes32(0),
+                coprocessorTxSenderAddresses: new address[](0)
+            });
+        }
+        return materials;
+    }
+
+    /**
+     * @notice Mock signature validation for user decryption request
+     * @dev Simulates ECDSA.recover() and signature validation
+     */
+    function _validateUserDecryptRequestSignature(
+        bytes calldata signature,
+        address userAddress
+    ) internal view virtual {
+        BenchmarkGasUtils.simulateExternalCall();
+    }
+
     // ======================= PUBLIC DECRYPTION =======================
 
     /**
      * @notice Request public decryption of ciphertext handles
-     * @dev Simplified version - no ACL checks, auto-generated decryptionId
+     * @dev Matches real Decryption.sol signature exactly
      * @param ctHandles Array of ciphertext handles to decrypt
      * @param extraData Generic bytes metadata
      * @return decryptionId The generated decryption request ID
@@ -190,6 +186,14 @@ contract DecryptionMockV2 {
             revert EmptyCtHandles();
         }
 
+        // Mock: Check handles conformance (ACL checks)
+        for (uint256 i = 0; i < ctHandles.length; i++) {
+            _checkIsPublicDecryptAllowed(ctHandles[i]);
+        }
+
+        // Mock: Fetch SNS ciphertext materials
+        SnsCiphertextMaterial[] memory snsCtMaterials = _getSnsCiphertextMaterials(ctHandles);
+
         // Generate a globally unique decryptionId for the public decryption request.
         // The counter is initialized at deployment such that decryptionId's first byte uniquely
         // represents a public decryption request, with format: [0000 0001 | counter_1..31]
@@ -198,16 +202,16 @@ contract DecryptionMockV2 {
 
         // Store request and transition to REQUESTED
         requestStatus[decryptionId] = RequestStatus.REQUESTED;
-        _publicCtHandles[decryptionId] = ctHandles;
+        publicCtHandles[decryptionId] = ctHandles;
 
         // Collect the fee from the transaction sender
         _collectPublicDecryptionFee(msg.sender);
 
-        emit PublicDecryptionRequest(decryptionId, ctHandles, extraData);
+        emit IDecryption.PublicDecryptionRequest(decryptionId, snsCtMaterials, extraData);
     }
 
     /**
-     * @notice Respond to a public decryption request
+     * @notice Respond to a public decryption request (GatewayV2: single aggregated response)
      * @dev Simplified version - no signature validation, single response completes request
      * @param decryptionId The decryption request ID
      * @param decryptedResult The decrypted result
@@ -251,20 +255,44 @@ contract DecryptionMockV2 {
 
     /**
      * @notice Request user decryption of ciphertext handles
-     * @dev Simplified version - no ACL checks, no signature validation, auto-generated decryptionId
-     * @param ctHandles Array of ciphertext handles to decrypt
+     * @dev Matches real Decryption.sol signature exactly
+     * @param ctHandleContractPairs The ciphertexts to decrypt for associated contracts
+     * @param requestValidity The validity period of the user decryption request
+     * @param contractsInfo The contracts' information (chain ID, addresses)
+     * @param userAddress The user's address
      * @param publicKey The user's public key for reencryption
+     * @param signature The EIP712 signature to verify
      * @param extraData Generic bytes metadata
      * @return decryptionId The generated decryption request ID
      */
     function userDecryptionRequest(
-        bytes32[] calldata ctHandles,
+        CtHandleContractPair[] calldata ctHandleContractPairs,
+        IDecryption.RequestValidity calldata requestValidity,
+        IDecryption.ContractsInfo calldata contractsInfo,
+        address userAddress,
         bytes calldata publicKey,
+        bytes calldata signature,
         bytes calldata extraData
     ) external returns (uint256 decryptionId) {
-        if (ctHandles.length == 0) {
+        if (ctHandleContractPairs.length == 0) {
             revert EmptyCtHandles();
         }
+
+        // Extract handles from pairs
+        bytes32[] memory ctHandles = new bytes32[](ctHandleContractPairs.length);
+        for (uint256 i = 0; i < ctHandleContractPairs.length; i++) {
+            ctHandles[i] = ctHandleContractPairs[i].ctHandle;
+
+            // Mock: Check ACL for user and contract
+            _checkIsAccountAllowed(ctHandleContractPairs[i].ctHandle, userAddress);
+            _checkIsAccountAllowed(ctHandleContractPairs[i].ctHandle, ctHandleContractPairs[i].contractAddress);
+        }
+
+        // Mock: Validate EIP712 signature
+        _validateUserDecryptRequestSignature(signature, userAddress);
+
+        // Mock: Fetch SNS ciphertext materials
+        SnsCiphertextMaterial[] memory snsCtMaterials = _getSnsCiphertextMaterials(ctHandles);
 
         // Generate a globally unique decryptionId for the user decryption request.
         // The counter is initialized at deployment such that decryptionId's first byte uniquely
@@ -274,7 +302,7 @@ contract DecryptionMockV2 {
 
         // Store request and transition to REQUESTED
         requestStatus[decryptionId] = RequestStatus.REQUESTED;
-        _userDecryptionPayloads[decryptionId] = UserDecryptionPayload({
+        userDecryptionPayloads[decryptionId] = Decryption.UserDecryptionPayload({
             publicKey: publicKey,
             ctHandles: ctHandles
         });
@@ -282,18 +310,26 @@ contract DecryptionMockV2 {
         // Collect the fee from the transaction sender
         _collectUserDecryptionFee(msg.sender);
 
-        emit UserDecryptionRequest(
+        // Silence unused variable warnings (used for realistic calldata size)
+        requestValidity;
+        contractsInfo;
+
+        // Burn additional gas to match real-world gas consumption (~800k total)
+        // Real: ~800k, Current: ~360k, Delta: ~450k
+        BenchmarkGasUtils.burnGas(450_000);
+
+        emit IDecryption.UserDecryptionRequest(
             decryptionId,
-            ctHandles,
-            msg.sender,
+            snsCtMaterials,
+            userAddress,
             publicKey,
             extraData
         );
     }
 
     /**
-     * @notice Respond to a user decryption request
-     * @dev Simplified version - no signature validation, single response completes request.
+     * @notice Respond to a user decryption request (GatewayV2: single aggregated response)
+     * @dev Simplified version - no signature validation, single response with all shares
      *      The Gateway aggregates all KMS node shares, verifies the signatures, and sends them in one transaction.
      * @param decryptionId The decryption request ID
      * @param userDecryptedShares Array of decryption shares from all KMS nodes
@@ -331,7 +367,7 @@ contract DecryptionMockV2 {
         // Transition to DONE
         requestStatus[decryptionId] = RequestStatus.DONE;
 
-        emit UserDecryptionResponse(decryptionId, userDecryptedShares, extraData);
+        emit IDecryption.UserDecryptionResponse(decryptionId, 0, userDecryptedShares[0], "", extraData);
     }
 
     // ======================= VIEW FUNCTIONS =======================
@@ -342,7 +378,7 @@ contract DecryptionMockV2 {
     function getPublicCtHandles(
         uint256 decryptionId
     ) external view returns (bytes32[] memory) {
-        return _publicCtHandles[decryptionId];
+        return publicCtHandles[decryptionId];
     }
 
     /**
@@ -355,7 +391,7 @@ contract DecryptionMockV2 {
         view
         returns (bytes memory publicKey, bytes32[] memory ctHandles)
     {
-        UserDecryptionPayload storage payload = _userDecryptionPayloads[
+        Decryption.UserDecryptionPayload storage payload = userDecryptionPayloads[
             decryptionId
         ];
         return (payload.publicKey, payload.ctHandles);
