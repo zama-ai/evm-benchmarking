@@ -646,6 +646,141 @@ func TestContractTxnAndWaitReceipt(t *testing.T) {
 }
 
 // ============================================================================
+// Tuple Encoding Tests
+// ============================================================================
+
+func TestEncodeABIWithTuple(t *testing.T) {
+	checkNodeAvailable(t)
+
+	client, err := setupClient()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		abiStr         string
+		method         string
+		args           []any
+		expectSuccess  bool
+		expectedLength int // 0 means don't check length
+	}{
+		{
+			name:   "SimpleTuple",
+			abiStr: `[{"type":"function","name":"setPerson","inputs":[{"name":"person","type":"tuple","components":[{"name":"addr","type":"address"},{"name":"age","type":"uint256"}]}],"outputs":[]}]`,
+			method: "setPerson",
+			args: []any{
+				[]any{"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", int64(25)},
+			},
+			expectSuccess:  true,
+			expectedLength: 4 + 32 + 32, // selector + address + uint256
+		},
+		{
+			name:   "NestedTuple",
+			abiStr: `[{"type":"function","name":"setOuter","inputs":[{"name":"outer","type":"tuple","components":[{"name":"addr","type":"address"},{"name":"inner","type":"tuple","components":[{"name":"value","type":"uint256"}]}]}],"outputs":[]}]`,
+			method: "setOuter",
+			args: []any{
+				[]any{"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", []any{int64(42)}},
+			},
+			expectSuccess: true,
+		},
+		{
+			name:   "TupleArray",
+			abiStr: `[{"type":"function","name":"setItems","inputs":[{"name":"items","type":"tuple[]","components":[{"name":"id","type":"uint256"},{"name":"data","type":"bytes32"}]}],"outputs":[]}]`,
+			method: "setItems",
+			args: []any{
+				[]any{
+					[]any{int64(1), "0x0000000000000000000000000000000000000000000000000000000000000001"},
+					[]any{int64(2), "0x0000000000000000000000000000000000000000000000000000000000000002"},
+				},
+			},
+			expectSuccess: true,
+		},
+		{
+			name:   "MixedTypes",
+			abiStr: `[{"type":"function","name":"setComplex","inputs":[{"name":"data","type":"tuple","components":[{"name":"addr","type":"address"},{"name":"amount","type":"uint256"},{"name":"hash","type":"bytes32"},{"name":"active","type":"bool"}]}],"outputs":[]}]`,
+			method: "setComplex",
+			args: []any{
+				[]any{
+					"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+					int64(1000000),
+					"0xabcdef0000000000000000000000000000000000000000000000000000000000",
+					true,
+				},
+			},
+			expectSuccess: true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			contract, err := client.NewContract("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb", testCase.abiStr)
+			require.NoError(t, err)
+
+			calldata, err := contract.EncodeABI(testCase.method, testCase.args...)
+			if testCase.expectSuccess {
+				require.NoError(t, err)
+				require.NotEmpty(t, calldata)
+
+				if testCase.expectedLength > 0 {
+					require.Len(t, calldata, testCase.expectedLength)
+				}
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+}
+
+func TestEncodeABIWithTupleErrors(t *testing.T) {
+	checkNodeAvailable(t)
+
+	client, err := setupClient()
+	require.NoError(t, err)
+
+	// ABI with tuple parameter.
+	abiStr := `[{
+		"type": "function",
+		"name": "setPerson",
+		"inputs": [{
+			"name": "person",
+			"type": "tuple",
+			"components": [
+				{"name": "addr", "type": "address"},
+				{"name": "age", "type": "uint256"}
+			]
+		}],
+		"outputs": []
+	}]`
+
+	contract, err := client.NewContract("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb", abiStr)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name  string
+		tuple any
+	}{
+		{
+			name:  "WrongFieldCount",
+			tuple: []any{"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"}, // Only 1 field, expects 2
+		},
+		{
+			name:  "TooManyFields",
+			tuple: []any{"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", int64(25), "extra"}, // 3 fields, expects 2
+		},
+		{
+			name:  "NotAnArray",
+			tuple: "not a tuple", // String instead of array
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := contract.EncodeABI("setPerson", testCase.tuple)
+			require.Error(t, err, "should fail for %s", testCase.name)
+		})
+	}
+}
+
+// ============================================================================
 // Utility Methods Tests
 // ============================================================================
 
