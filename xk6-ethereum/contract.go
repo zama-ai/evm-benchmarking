@@ -120,7 +120,7 @@ func convertValue(arg any, typ abi.Type) (any, error) {
 			return arg, nil
 		}
 
-		return nil, fmt.Errorf("%w: %s, got %T", errInvalidTupleType, typ.String(), arg)
+		return convertTuple(arg, typ)
 	}
 
 	return arg, nil
@@ -158,6 +158,34 @@ func convertSequence(arg any, typ abi.Type) (any, error) {
 		}
 
 		result.Index(itemIndex).Set(reflect.ValueOf(converted))
+	}
+
+	return result.Interface(), nil
+}
+
+// convertTuple converts a JS array into a Go struct matching the ABI tuple type.
+// Tuples in Solidity (structs) are passed from JS as arrays where each element
+// corresponds to a struct field in order.
+func convertTuple(arg any, typ abi.Type) (any, error) {
+	items, ok := arg.([]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s, got %T", errInvalidTupleType, typ.String(), arg)
+	}
+
+	if len(items) != len(typ.TupleElems) {
+		return nil, fmt.Errorf("%w: expected %d fields, got %d", errInvalidTupleType, len(typ.TupleElems), len(items))
+	}
+
+	// Create a new instance of the tuple struct type
+	result := reflect.New(typ.GetType()).Elem()
+
+	for fieldIndex, elemType := range typ.TupleElems {
+		converted, err := convertValue(items[fieldIndex], *elemType)
+		if err != nil {
+			return nil, fmt.Errorf("field %d (%s): %w", fieldIndex, typ.TupleRawNames[fieldIndex], err)
+		}
+
+		result.Field(fieldIndex).Set(reflect.ValueOf(converted))
 	}
 
 	return result.Interface(), nil
