@@ -27,26 +27,21 @@ interface SetupData {
 	contract_address: string;
 	accounts: Account[];
 	root_address: string;
+	// if gas_price were to not be a fixed value, adapt it dynamically
 	gas_price: number;
 	multicallAddress: string | null;
 }
 
 const ACCOUNTS_FILE = (__ENV.ACCOUNTS_FILE as string) || null;
 const CONTRACT_ADDRESS = (__ENV.CONTRACT_ADDRESS as string) || null;
-const CONSENSUS_THRESHOLD = Number.parseInt(
-	__ENV.CONSENSUS_THRESHOLD || "2",
-	10,
-);
-const PAYLOAD_SIZE_BYTES = Number.parseInt(
-	__ENV.PAYLOAD_SIZE_BYTES || "355",
-	10,
-);
-
-console.log("PAYLOAD_SIZE_BYTES", PAYLOAD_SIZE_BYTES);
+const CONSENSUS_THRESHOLD =
+	Number.parseInt(__ENV.CONSENSUS_THRESHOLD as string, 10) || 2;
+const PAYLOAD_SIZE_BYTES =
+	Number.parseInt((__ENV.PAYLOAD_SIZE_BYTES || "1300") as string, 10) || 1300;
 
 // ======================= TEST OPTIONS =======================
 
-export const options = getScenarios("public-decrypt");
+export const options = getScenarios("user-decrypt-response");
 
 let vuClient: Client | null = null;
 let vuContract: Contract | null = null;
@@ -58,14 +53,14 @@ export function setup(): SetupData {
 
 	// Try to load accounts from file if specified
 	if (ACCOUNTS_FILE) {
-		console.log(`Loading accounts from: ${ACCOUNTS_FILE}`);
+		console.log(`🔍 Loading accounts from: ${ACCOUNTS_FILE}`);
 		accounts = loadAccountsFromFile(ACCOUNTS_FILE);
 	}
 
 	// If no accounts loaded from file, create new ones
 	const masterClient = initializeClient();
 	if (!accounts) {
-		console.log(`Creating ${CONFIG.maxVUs + 1} funded test accounts...`);
+		console.log(`💰 Creating ${CONFIG.maxVUs + 1} funded test accounts...`);
 		// + 1 to account for the monitoring VU.
 		const mnemonic = __ENV.MNEMONIC;
 		if (!mnemonic) {
@@ -77,7 +72,7 @@ export function setup(): SetupData {
 	// Validate we have enough accounts
 	if (accounts.length < CONFIG.maxVUs) {
 		throw new Error(
-			`Need ${CONFIG.maxVUs} accounts, but only have ${accounts.length}`,
+			`❌ Need ${CONFIG.maxVUs} accounts, but only have ${accounts.length}`,
 		);
 	}
 
@@ -85,7 +80,7 @@ export function setup(): SetupData {
 	// Deploy contract if not provided
 	if (!CONTRACT_ADDRESS) {
 		console.log(
-			`Deploying contract with consensus threshold: ${CONSENSUS_THRESHOLD}`,
+			`🔍 Deploying contract with consensus threshold: ${CONSENSUS_THRESHOLD}`,
 		);
 		const receipt = masterClient.deployContract(
 			CONTRACT_ABI,
@@ -94,16 +89,16 @@ export function setup(): SetupData {
 		);
 		if (receipt.status !== 1) {
 			console.error(
-				`Contract deployment failed - receipt: ${JSON.stringify(receipt)}`,
+				`❌ Contract deployment failed - receipt: ${JSON.stringify(receipt)}`,
 			);
-			throw new Error("Contract deployment failed");
+			throw new Error("❌ Contract deployment failed");
 		}
 
 		contractAddress = String(receipt.contractAddress);
-		console.log(`Contract deployed at: ${contractAddress}`);
+		console.log(`✅ Contract deployed at: ${contractAddress}`);
 	} else {
 		contractAddress = CONTRACT_ADDRESS;
-		console.log(`Using existing contract: ${contractAddress}`);
+		console.log(`🔍 Using existing contract: ${contractAddress}`);
 	}
 
 	const gasPrice = masterClient.gasPrice();
@@ -121,17 +116,15 @@ export function setup(): SetupData {
 // ======================= MAIN TEST FUNCTION =======================
 
 /**
- * Creates call data for a publicDecryptionResponse transaction
+ * Creates call data for a userDecryptionResponse transaction
  */
 function createDecryptionCallData(
 	contract: Contract,
 	batchIndex: number = 0,
 ): Uint8Array {
 	// See Decryption.sol on the base decryption ID calculation
-	// Public decrypt uses RequestType.PublicDecrypt (1) << 248
 	// Note: this cannot be done in the `setup` phase as the auto-serialization of BigInt to JSON done by K6 loses the precision.
-	const baseDecryptionId = (1n << 248n) + 1n;
-
+	const baseDecryptionId = (2n << 248n) + 1n;
 	// Create unique decryptionOffset using VU ID, iteration, and batch index
 	// Multipliers are calculated dynamically based on test parameters:
 	// - CONFIG.rate * duration: conservative estimate of max iterations per VU
@@ -148,18 +141,17 @@ function createDecryptionCallData(
 		BigInt(exec.vu.iterationInScenario) * batchMultiplier +
 		BigInt(batchIndex);
 
+	// Note: baseDecryptionId is _supposed_ to be a bigint but for some reason there's a type error if we don't cast it to BigInt
 	const decryptionId = BigInt(baseDecryptionId) + decryptionOffset;
-
-	// Generate a random signature (65 bytes)
 	const randomBytes = Math.floor(Math.random() * 0xffffffff)
 		.toString(16)
 		.padStart(8, "0");
 	const signature = `0x${randomBytes.repeat(16)}01`;
 
 	return contract.encodeABI(
-		"publicDecryptionResponse",
+		"userDecryptionResponse",
 		decryptionId,
-		`0x${"ff".repeat(PAYLOAD_SIZE_BYTES)}`, // decryptedResult
+		`0x${"ff".repeat(PAYLOAD_SIZE_BYTES)}`, // userDecryptedShare
 		signature, // signature (65 bytes)
 		"0x00", // extraData
 	);
@@ -172,7 +164,7 @@ export default function (data: SetupData): void {
 	// Validate account availability
 	if (accountIndex >= data.accounts.length) {
 		console.log(
-			`VU ${exec.vu.idInTest}: No account available (index ${accountIndex})`,
+			`❌ VU ${exec.vu.idInTest}: No account available (index ${accountIndex})`,
 		);
 		return;
 	}
@@ -198,7 +190,7 @@ export default function (data: SetupData): void {
 
 	try {
 		if (data.multicallAddress) {
-			// Build batch of publicDecryptionResponse calls
+			// Build batch of userDecryptionResponse calls
 			const calls: Call3[] = [];
 			for (let i = 0; i < CONFIG.batchSize; i++) {
 				const callData = createDecryptionCallData(vuContract, i);
@@ -216,7 +208,7 @@ export default function (data: SetupData): void {
 			});
 			if (receipt.status !== 1) {
 				fail(
-					`VU ${exec.vu.idInTest}: Batch transaction failed with status: ${receipt.status}`,
+					`❌ VU ${exec.vu.idInTest}: Batch transaction failed with status: ${receipt.status}`,
 				);
 			}
 		} else {
@@ -231,12 +223,12 @@ export default function (data: SetupData): void {
 			});
 			if (receipt.status !== 1) {
 				fail(
-					`VU ${exec.vu.idInTest}: Transaction failed with status: ${receipt.status}`,
+					`❌ VU ${exec.vu.idInTest}: Transaction failed with status: ${receipt.status}`,
 				);
 			}
 		}
 	} catch (error) {
-		console.error(`VU ${exec.vu.idInTest}: ${error}`);
+		console.error(`❌ VU ${exec.vu.idInTest}: ${error}`);
 	}
 }
 
@@ -247,7 +239,7 @@ export function monitor() {
 // ======================= TEARDOWN =======================
 
 export async function teardown(data: SetupData): Promise<void> {
-	console.log("\nStarting ETH refund process...");
+	console.log("\n🔄 Starting ETH refund process...");
 	const masterClient = initializeClient();
 	const totalRefunded = await refundTestAccounts(
 		masterClient,
@@ -255,15 +247,15 @@ export async function teardown(data: SetupData): Promise<void> {
 		data.accounts,
 	);
 	console.log(
-		`Refund complete: ${(totalRefunded / 1e18).toFixed(6)} ETH returned to root account`,
+		`✅ Refund complete: ${(totalRefunded / 1e18).toFixed(6)} ETH returned to root account`,
 	);
 
-	console.log(`=== CONCURRENT TEST SUMMARY ===`);
+	console.log(`🎯 === CONCURRENT TEST SUMMARY ===`);
 	console.log(
-		`All ${CONSENSUS_THRESHOLD} VUs completed their transactions concurrently`,
+		`🎯 All ${CONSENSUS_THRESHOLD} VUs completed their transactions concurrently`,
 	);
 	console.log(
-		`Each transaction confirmation measured independently and in parallel`,
+		`🎯 Each transaction confirmation measured independently and in parallel`,
 	);
 }
 
