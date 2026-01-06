@@ -1,3 +1,6 @@
+//go:build integration
+// +build integration
+
 package ethereum
 
 import (
@@ -38,7 +41,7 @@ var (
 )
 
 // checkNodeAvailable verifies that an Ethereum node is available at the test node URL.
-// If not available, it skips the test with a clear error message.
+// If not available, it fails the test with a clear error message.
 func checkNodeAvailable(t *testing.T) {
 	t.Helper()
 
@@ -47,7 +50,7 @@ func checkNodeAvailable(t *testing.T) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, testNodeURL, nil)
 	if err != nil {
-		t.Skipf("Failed to create request: %v", err)
+		t.Fatalf("Failed to create request: %v", err)
 
 		return
 	}
@@ -58,7 +61,7 @@ func checkNodeAvailable(t *testing.T) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		t.Skipf("Ethereum node not available at %s. Start Anvil with: anvil --port 8545", testNodeURL)
+		t.Fatalf("Ethereum node not available at %s. Start Anvil with: anvil --port 8545", testNodeURL)
 
 		return
 	}
@@ -100,6 +103,32 @@ func setupClient() (*Client, error) {
 		privateKey: privateKey,
 		address:    address,
 		chainID:    chainID,
+		opts: &options{
+			URL: url,
+		},
+	}, nil
+}
+
+// setupReadOnlyClient creates a client without a private key for monitoring-only use cases.
+func setupReadOnlyClient() (*Client, error) {
+	url := testNodeURL
+
+	rpcClient, err := rpc.Dial(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create rpc client: %w", err)
+	}
+
+	ethClient := ethclient.NewClient(rpcClient)
+
+	chainID, err := ethClient.ChainID(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chain ID: %w", err)
+	}
+
+	return &Client{
+		client:    ethClient,
+		rpcClient: rpcClient,
+		chainID:   chainID,
 		opts: &options{
 			URL: url,
 		},
@@ -148,6 +177,22 @@ func TestGasPrice(t *testing.T) {
 	gasPrice, err := client.GasPrice()
 	require.NoError(t, err)
 	require.Positive(t, gasPrice, "gas price should be greater than 0")
+}
+
+func TestReadOnlyClient(t *testing.T) {
+	checkNodeAvailable(t)
+
+	client, err := setupReadOnlyClient()
+	require.NoError(t, err)
+
+	_, err = client.BlockNumber()
+	require.NoError(t, err)
+
+	_, err = client.SendTransaction(Transaction{
+		To:    "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+		Value: 1,
+	})
+	require.ErrorIs(t, err, errPrivateKeyRequired)
 }
 
 func TestBlockNumber(t *testing.T) {
@@ -780,6 +825,18 @@ func TestEncodeABIWithTupleErrors(t *testing.T) {
 	}
 }
 
+func TestNewBlockMonitor_SubscribeFailure(t *testing.T) {
+	client := &Client{
+		opts: &options{
+			URL: "http://127.0.0.1:1", // invalid port; WS dial should fail
+		},
+	}
+
+	monitor, err := client.newBlockMonitor(1)
+	require.Error(t, err)
+	require.Nil(t, monitor)
+}
+
 // ============================================================================
 // Utility Methods Tests
 // ============================================================================
@@ -826,7 +883,11 @@ func TestNewBlockMonitor(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			monitor := client.NewBlockMonitor(testCase.batchSize)
+			monitor, err := client.newBlockMonitor(testCase.batchSize)
+			if err != nil {
+				t.Skipf("block monitor unavailable: %v", err)
+			}
+
 			require.NotNil(t, monitor)
 			require.Equal(t, client, monitor.client)
 
@@ -852,7 +913,11 @@ func TestBlockMonitor_PollBlocks(t *testing.T) {
 
 	// BlockMonitor requires k6 runtime for metrics, so we'll skip detailed testing.
 	// In a real k6 environment, this would work.
-	monitor := client.NewBlockMonitor(1)
+	monitor, err := client.newBlockMonitor(1)
+	if err != nil {
+		t.Skipf("block monitor unavailable: %v", err)
+	}
+
 	require.NotNil(t, monitor)
 
 	// Test that it doesn't panic (metrics will be skipped if vu is nil)
@@ -896,17 +961,9 @@ func TestInvalidAddress(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// go-ethereum normalizes invalid addresses, so these should not error
-			// but may return 0 values.
 			value, err := testCase.method(testCase.address)
-			// go-ethereum may or may not error, but shouldn't panic.
-			if err != nil {
-				t.Logf("Address %s resulted in error (expected): %v", testCase.address, err)
-			} else {
-				t.Logf("Address %s normalized to value: %d", testCase.address, value)
-				// value is uint64, which is always >= 0, so we just verify we got it.
-				_ = value
-			}
+			require.ErrorIs(t, err, errInvalidAddress)
+			_ = value
 		})
 	}
 }

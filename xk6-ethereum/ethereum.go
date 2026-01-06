@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -23,6 +24,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/grafana/sobek"
+	"github.com/sirupsen/logrus"
+	jscommon "go.k6.io/k6/js/common"
 	"go.k6.io/k6/js/modules"
 	"go.k6.io/k6/metrics"
 )
@@ -34,6 +37,8 @@ var (
 	errWalletNotInitialized = errors.New("wallet not initialized")
 	errReceiptTimeout       = errors.New("receipt polling timed out")
 	errReceiptCancelled     = errors.New("receipt polling cancelled by context")
+	errInvalidAddress       = errors.New("invalid address")
+	errValueOverflow        = errors.New("value out of int64 range")
 )
 
 // neverClosedChan is a sentinel channel that never closes, used when VU context is nil.
@@ -48,6 +53,19 @@ const (
 	defaultReceiptTimeout      = 5 * time.Minute
 	defaultReceiptPollInterval = 100 * time.Millisecond // Poll interval for receipt checks
 	maxNetworkRetries          = 5
+	maxInt64                   = int64(^uint64(0) >> 1)
+)
+
+const (
+	aggregate3ABI      = `[{"inputs":[{"components":[{"name":"target","type":"address"},{"name":"allowFailure","type":"bool"},{"name":"callData","type":"bytes"}],"name":"calls","type":"tuple[]"}],"name":"aggregate3","outputs":[{"components":[{"name":"success","type":"bool"},{"name":"returnData","type":"bytes"}],"name":"returnData","type":"tuple[]"}],"stateMutability":"payable","type":"function"}]`
+	aggregate3ValueABI = `[{"inputs":[{"components":[{"name":"target","type":"address"},{"name":"allowFailure","type":"bool"},{"name":"value","type":"uint256"},{"name":"callData","type":"bytes"}],"name":"calls","type":"tuple[]"}],"name":"aggregate3Value","outputs":[{"components":[{"name":"success","type":"bool"},{"name":"returnData","type":"bytes"}],"name":"returnData","type":"tuple[]"}],"stateMutability":"payable","type":"function"}]`
+)
+
+var (
+	multicallABIOnce  sync.Once
+	multicallABI      abi.ABI
+	multicallValueABI abi.ABI
+	multicallABIError error
 )
 
 // AccessTuple represents a single entry in an EIP-2930 access list.
@@ -108,6 +126,56 @@ func (c *Client) runtimeTagSet() *metrics.TagSet {
 	}
 
 	return state.Tags.GetCurrentValues().Tags
+}
+
+func (c *Client) getLogger() logrus.FieldLogger {
+	if c == nil || c.vu == nil {
+		return nil
+	}
+
+	state := c.vu.State()
+	if state == nil || state.Logger == nil {
+		return nil
+	}
+
+	return state.Logger
+}
+
+func (c *Client) requireSigner() error {
+	if c == nil || c.privateKey == nil {
+		return errPrivateKeyRequired
+	}
+
+	return nil
+}
+
+func parseHexAddress(input string) (common.Address, error) {
+	if !common.IsHexAddress(input) {
+		return common.Address{}, fmt.Errorf("%w: %s", errInvalidAddress, input)
+	}
+
+	return common.HexToAddress(input), nil
+}
+
+func safeInt64FromUint64(value uint64) (int64, error) {
+	if value > uint64(maxInt64) {
+		return 0, fmt.Errorf("%w: %d", errValueOverflow, value)
+	}
+
+	return int64(value), nil
+}
+
+func getMulticallABIs() (abi.ABI, abi.ABI, error) {
+	multicallABIOnce.Do(func() {
+		multicallABI, multicallABIError = abi.JSON(strings.NewReader(aggregate3ABI))
+		if multicallABIError != nil {
+			return
+		}
+
+		multicallValueABI, multicallABIError = abi.JSON(strings.NewReader(aggregate3ValueABI))
+	})
+
+	return multicallABI, multicallValueABI, multicallABIError
 }
 
 func (c *Client) reportCallMetrics(endpoint string, duration time.Duration) {
@@ -191,8 +259,9 @@ func (c *Client) Exports() modules.Exports {
 func (c *Client) Call(method string, params ...any) (any, error) {
 	var out any
 
+	ctx := c.getBaseContext()
 	startTime := time.Now()
-	err := c.rpcClient.Call(&out, method, params...)
+	err := c.rpcClient.CallContext(ctx, &out, method, params...)
 	c.reportCallMetrics(method, time.Since(startTime))
 
 	if err != nil {
@@ -204,8 +273,9 @@ func (c *Client) Call(method string, params ...any) (any, error) {
 
 // GasPrice returns the current gas price.
 func (c *Client) GasPrice() (uint64, error) {
+	ctx := c.getBaseContext()
 	startTime := time.Now()
-	gasPrice, err := c.client.SuggestGasPrice(context.Background())
+	gasPrice, err := c.client.SuggestGasPrice(ctx)
 	c.reportCallMetrics("gas_price", time.Since(startTime))
 
 	if err != nil {
@@ -220,8 +290,14 @@ func (c *Client) GasPrice() (uint64, error) {
 // GetBalance returns the balance of the given address.
 // blockNumber: use nil for latest, or a specific block number.
 func (c *Client) GetBalance(address string, blockNumber *big.Int) (uint64, error) {
+	addr, err := parseHexAddress(address)
+	if err != nil {
+		return 0, err
+	}
+
+	ctx := c.getBaseContext()
 	startTime := time.Now()
-	balance, err := c.client.BalanceAt(context.Background(), common.HexToAddress(address), blockNumber)
+	balance, err := c.client.BalanceAt(ctx, addr, blockNumber)
 	c.reportCallMetrics("eth_getBalance", time.Since(startTime))
 
 	if err != nil {
@@ -235,8 +311,9 @@ func (c *Client) GetBalance(address string, blockNumber *big.Int) (uint64, error
 
 // BlockNumber returns the current block number.
 func (c *Client) BlockNumber() (uint64, error) {
+	ctx := c.getBaseContext()
 	startTime := time.Now()
-	blockNum, err := c.client.BlockNumber(context.Background())
+	blockNum, err := c.client.BlockNumber(ctx)
 	c.reportCallMetrics("eth_blockNumber", time.Since(startTime))
 
 	if err != nil {
@@ -251,8 +328,9 @@ func (c *Client) BlockNumber() (uint64, error) {
 // GetBlockByNumber returns the block with the given block number.
 // number: use nil for latest block.
 func (c *Client) GetBlockByNumber(number *big.Int) (*Block, error) {
+	ctx := c.getBaseContext()
 	startTime := time.Now()
-	block, err := c.client.BlockByNumber(context.Background(), number)
+	block, err := c.client.BlockByNumber(ctx, number)
 	c.reportCallMetrics("eth_getBlockByNumber", time.Since(startTime))
 
 	if err != nil {
@@ -266,8 +344,14 @@ func (c *Client) GetBlockByNumber(number *big.Int) (*Block, error) {
 
 // GetNonce returns the nonce for the given address.
 func (c *Client) GetNonce(address string) (uint64, error) {
+	addr, err := parseHexAddress(address)
+	if err != nil {
+		return 0, err
+	}
+
+	ctx := c.getBaseContext()
 	startTime := time.Now()
-	nonce, err := c.client.PendingNonceAt(context.Background(), common.HexToAddress(address))
+	nonce, err := c.client.PendingNonceAt(ctx, addr)
 	c.reportCallMetrics("eth_getTransactionCount", time.Since(startTime))
 
 	if err != nil {
@@ -281,21 +365,46 @@ func (c *Client) GetNonce(address string) (uint64, error) {
 
 // EstimateGas returns the estimated gas for the given transaction.
 func (c *Client) EstimateGas(transaction Transaction) (uint64, error) {
+	if transaction.Value < 0 {
+		return 0, fmt.Errorf("value must be non-negative")
+	}
+
 	// Handle contract creation: empty string To means nil address
 	var toAddr *common.Address
 
 	if transaction.To != "" {
-		addr := common.HexToAddress(transaction.To)
+		addr, err := parseHexAddress(transaction.To)
+		if err != nil {
+			return 0, err
+		}
+
 		toAddr = &addr
 	}
 
+	from := c.address
+	if transaction.From != "" {
+		addr, err := parseHexAddress(transaction.From)
+		if err != nil {
+			return 0, err
+		}
+
+		from = addr
+	} else if c.privateKey == nil {
+		from = common.Address{}
+	}
+
+	accessList, err := convertAccessList(transaction.AccessList)
+	if err != nil {
+		return 0, err
+	}
+
 	msg := ethereum.CallMsg{
-		From:       c.address,
+		From:       from,
 		To:         toAddr,
 		Value:      big.NewInt(transaction.Value),
 		Data:       transaction.Input,
 		GasPrice:   big.NewInt(0).SetUint64(transaction.GasPrice),
-		AccessList: convertAccessList(transaction.AccessList),
+		AccessList: accessList,
 	}
 
 	if transaction.GasFeeCap > 0 {
@@ -306,8 +415,9 @@ func (c *Client) EstimateGas(transaction Transaction) (uint64, error) {
 		msg.GasTipCap = big.NewInt(0).SetUint64(transaction.GasTipCap)
 	}
 
+	ctx := c.getBaseContext()
 	startTime := time.Now()
-	gas, err := c.client.EstimateGas(context.Background(), msg)
+	gas, err := c.client.EstimateGas(ctx, msg)
 	c.reportCallMetrics("eth_estimateGas", time.Since(startTime))
 
 	if err != nil {
@@ -322,6 +432,10 @@ func (c *Client) EstimateGas(transaction Transaction) (uint64, error) {
 // SendTransaction signs and sends a transaction to the network without waiting for the receipt.
 // This is similar to SendRawTransaction but uses the same transaction building logic as SendTransactionSync.
 func (c *Client) SendTransaction(transaction Transaction) (string, error) {
+	if err := c.requireSigner(); err != nil {
+		return "", err
+	}
+
 	// Default nonce from NonceManager if not explicitly provided.
 	if transaction.Nonce == 0 {
 		nonce, err := globalNonceManager.Acquire(c, c.address)
@@ -351,7 +465,7 @@ func (c *Client) SendTransaction(transaction Transaction) (string, error) {
 	}
 
 	startTime := time.Now()
-	err = c.client.SendTransaction(context.Background(), signedTx)
+	err = c.client.SendTransaction(c.getBaseContext(), signedTx)
 	c.reportCallMetrics("eth_sendRawTransaction", time.Since(startTime))
 
 	if err != nil {
@@ -365,6 +479,10 @@ func (c *Client) SendTransaction(transaction Transaction) (string, error) {
 
 // SendRawTransaction signs and sends transaction to the network.
 func (c *Client) SendRawTransaction(transaction Transaction) (string, error) {
+	if err := c.requireSigner(); err != nil {
+		return "", err
+	}
+
 	// Default nonce from NonceManager if not explicitly provided.
 	if transaction.Nonce == 0 {
 		nonce, err := globalNonceManager.Acquire(c, c.address)
@@ -448,6 +566,10 @@ func (c *Client) WaitForTransactionReceipt(hash string) *sobek.Promise {
 
 // SendTransactionSync signs, sends and waits for the transaction receipt synchronously.
 func (c *Client) SendTransactionSync(transaction Transaction) (*Receipt, error) {
+	if err := c.requireSigner(); err != nil {
+		return nil, err
+	}
+
 	return c.sendTransactionSyncWithRetries(transaction, maxTxRetries)
 }
 
@@ -477,7 +599,7 @@ func (c *Client) sendTransactionSyncWithRetries(transaction Transaction, retries
 
 	startTime := time.Now()
 
-	receipt, err := c.sendTransactionSync(context.Background(), signedTx, nil)
+	receipt, err := c.sendTransactionSync(c.getBaseContext(), signedTx, nil)
 	if err != nil { //nolint:nestif
 		if retriesLeft > 0 {
 			switch retryAction(err) {
@@ -569,6 +691,10 @@ func (c *Client) sendTransactionSync(ctx context.Context, tx *types.Transaction,
 // eth_sendRawTransaction + polling, rather than eth_sendRawTransactionSync.
 // This is useful for nodes that don't support the sync RPC method.
 func (c *Client) SendTransactionAndWaitReceipt(transaction Transaction) (*Receipt, error) {
+	if err := c.requireSigner(); err != nil {
+		return nil, err
+	}
+
 	return c.sendTransactionAndWaitReceiptWithRetries(transaction, maxTxRetries)
 }
 
@@ -600,7 +726,7 @@ func (c *Client) sendTransactionAndWaitReceiptWithRetries(transaction Transactio
 
 	// Send the transaction using eth_sendRawTransaction.
 	sendStartTime := time.Now()
-	err = c.client.SendTransaction(context.Background(), signedTx)
+	err = c.client.SendTransaction(c.getBaseContext(), signedTx)
 	c.reportCallMetrics("eth_sendRawTransaction", time.Since(sendStartTime))
 
 	if err != nil { //nolint: nestif
@@ -657,6 +783,10 @@ func (c *Client) sendTransactionAndWaitReceiptWithRetries(transaction Transactio
 // BatchCallSync batches multiple calls via Multicall3's aggregate3 function.
 // It encodes the calls, sends them as a single transaction, and returns the receipt.
 func (c *Client) BatchCallSync(multicallAddr string, calls []Call3, opts TxnOpts) (*Receipt, error) {
+	if _, err := parseHexAddress(multicallAddr); err != nil {
+		return nil, err
+	}
+
 	if len(calls) == 0 {
 		return nil, errNoCallsProvided
 	}
@@ -667,12 +797,17 @@ func (c *Client) BatchCallSync(multicallAddr string, calls []Call3, opts TxnOpts
 	}
 
 	// Build transaction to Multicall3.
+	value, err := safeInt64FromUint64(opts.Value)
+	if err != nil {
+		return nil, err
+	}
+
 	transaction := Transaction{
 		To:         multicallAddr,
 		Input:      input,
 		GasPrice:   opts.GasPrice,
 		Gas:        opts.GasLimit,
-		Value:      int64(opts.Value), //nolint:gosec // Value is bounded by uint64.
+		Value:      value,
 		Nonce:      opts.Nonce,
 		AccessList: opts.AccessList,
 	}
@@ -682,10 +817,7 @@ func (c *Client) BatchCallSync(multicallAddr string, calls []Call3, opts TxnOpts
 
 // encodeAggregate3 encodes calls for Multicall3's aggregate3 function.
 func encodeAggregate3(calls []Call3) ([]byte, error) {
-	// Define the aggregate3 ABI.
-	const aggregate3ABI = `[{"inputs":[{"components":[{"name":"target","type":"address"},{"name":"allowFailure","type":"bool"},{"name":"callData","type":"bytes"}],"name":"calls","type":"tuple[]"}],"name":"aggregate3","outputs":[{"components":[{"name":"success","type":"bool"},{"name":"returnData","type":"bytes"}],"name":"returnData","type":"tuple[]"}],"stateMutability":"payable","type":"function"}]`
-
-	parsedABI, err := abi.JSON(strings.NewReader(aggregate3ABI))
+	parsedABI, _, err := getMulticallABIs()
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse aggregate3 ABI: %w", err)
 	}
@@ -699,8 +831,13 @@ func encodeAggregate3(calls []Call3) ([]byte, error) {
 
 	callTuples := make([]call3Tuple, len(calls))
 	for i, call := range calls {
+		addr, err := parseHexAddress(call.Target)
+		if err != nil {
+			return nil, err
+		}
+
 		callTuples[i] = call3Tuple{
-			Target:       common.HexToAddress(call.Target),
+			Target:       addr,
 			AllowFailure: call.AllowFailure,
 			CallData:     call.Calldata,
 		}
@@ -717,13 +854,15 @@ func encodeAggregate3(calls []Call3) ([]byte, error) {
 // BatchCallValueSync batches multiple calls with ETH values via Multicall3's aggregate3Value function.
 // It encodes the calls, sends them as a single transaction with the sum of values, and returns the receipt.
 func (c *Client) BatchCallValueSync(multicallAddr string, calls []Call3Value, opts TxnOpts) (*Receipt, error) {
+	if _, err := parseHexAddress(multicallAddr); err != nil {
+		return nil, err
+	}
+
 	if len(calls) == 0 {
 		return nil, errNoCallsProvided
 	}
 
-	var totalValue int64
-
-	input, err := encodeAggregate3Value(calls, &totalValue)
+	input, totalValue, err := encodeAggregate3Value(calls)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode aggregate3Value call: %w", err)
 	}
@@ -743,13 +882,10 @@ func (c *Client) BatchCallValueSync(multicallAddr string, calls []Call3Value, op
 }
 
 // encodeAggregate3Value encodes calls for Multicall3's aggregate3Value function.
-func encodeAggregate3Value(calls []Call3Value, totalValue *int64) ([]byte, error) {
-	// Define the aggregate3Value ABI.
-	const aggregate3ValueABI = `[{"inputs":[{"components":[{"name":"target","type":"address"},{"name":"allowFailure","type":"bool"},{"name":"value","type":"uint256"},{"name":"callData","type":"bytes"}],"name":"calls","type":"tuple[]"}],"name":"aggregate3Value","outputs":[{"components":[{"name":"success","type":"bool"},{"name":"returnData","type":"bytes"}],"name":"returnData","type":"tuple[]"}],"stateMutability":"payable","type":"function"}]`
-
-	parsedABI, err := abi.JSON(strings.NewReader(aggregate3ValueABI))
+func encodeAggregate3Value(calls []Call3Value) ([]byte, int64, error) {
+	_, parsedABI, err := getMulticallABIs()
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse aggregate3Value ABI: %w", err)
+		return nil, 0, fmt.Errorf("failed to parse aggregate3Value ABI: %w", err)
 	}
 
 	// Build call tuples.
@@ -761,49 +897,72 @@ func encodeAggregate3Value(calls []Call3Value, totalValue *int64) ([]byte, error
 	}
 
 	callTuples := make([]call3ValueTuple, len(calls))
+	var totalUint uint64
+
 	for i, call := range calls {
+		if call.Value > uint64(maxInt64) {
+			return nil, 0, fmt.Errorf("%w: %d", errValueOverflow, call.Value)
+		}
+
+		if totalUint > uint64(maxInt64)-call.Value {
+			return nil, 0, fmt.Errorf("%w: %d", errValueOverflow, totalUint+call.Value)
+		}
+
+		addr, err := parseHexAddress(call.Target)
+		if err != nil {
+			return nil, 0, err
+		}
+
 		callTuples[i] = call3ValueTuple{
-			Target:       common.HexToAddress(call.Target),
+			Target:       addr,
 			AllowFailure: call.AllowFailure,
 			Value:        big.NewInt(int64(call.Value)), //nolint:gosec // Value is bounded by uint64.
 			CallData:     call.Calldata,
 		}
-		*totalValue += int64(call.Value) //nolint:gosec // Value is bounded by uint64.
+		totalUint += call.Value
 	}
 
 	packed, err := parsedABI.Pack("aggregate3Value", callTuples)
 	if err != nil {
-		return nil, fmt.Errorf("failed to pack aggregate3Value call: %w", err)
+		return nil, 0, fmt.Errorf("failed to pack aggregate3Value call: %w", err)
 	}
 
-	return packed, nil
+	return packed, int64(totalUint), nil
 }
 
 // convertAccessList converts our AccessTuple slice to go-ethereum's types.AccessList.
-func convertAccessList(accessList []AccessTuple) types.AccessList {
+func convertAccessList(accessList []AccessTuple) (types.AccessList, error) {
 	if len(accessList) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	result := make(types.AccessList, len(accessList))
 
 	for tupleIdx, tuple := range accessList {
+		addr, err := parseHexAddress(tuple.Address)
+		if err != nil {
+			return nil, err
+		}
+
 		storageKeys := make([]common.Hash, len(tuple.StorageKeys))
 		for keyIdx, key := range tuple.StorageKeys {
 			storageKeys[keyIdx] = common.HexToHash(key)
 		}
 
 		result[tupleIdx] = types.AccessTuple{
-			Address:     common.HexToAddress(tuple.Address),
+			Address:     addr,
 			StorageKeys: storageKeys,
 		}
 	}
 
-	return result
+	return result, nil
 }
 
 // buildTypedTx converts a Transaction into a go-ethereum transaction, estimating gas if needed.
 func (c *Client) buildTypedTx(transaction Transaction) (*types.Transaction, error) {
+	if transaction.Value < 0 {
+		return nil, fmt.Errorf("value must be non-negative")
+	}
 	gas := transaction.Gas
 	if gas == 0 {
 		estimatedGas, err := c.EstimateGas(transaction)
@@ -818,11 +977,18 @@ func (c *Client) buildTypedTx(transaction Transaction) (*types.Transaction, erro
 	var toAddr *common.Address
 
 	if transaction.To != "" {
-		addr := common.HexToAddress(transaction.To)
+		addr, err := parseHexAddress(transaction.To)
+		if err != nil {
+			return nil, err
+		}
+
 		toAddr = &addr
 	}
 
-	accessList := convertAccessList(transaction.AccessList)
+	accessList, err := convertAccessList(transaction.AccessList)
+	if err != nil {
+		return nil, err
+	}
 
 	// Use EIP-1559 (DynamicFeeTx) if fee cap/tip cap are set, or if access list is provided
 	if transaction.GasFeeCap > 0 || transaction.GasTipCap > 0 || len(accessList) > 0 {
@@ -879,7 +1045,7 @@ func (c *Client) signAndSendRawWithRetries(transaction Transaction, retriesLeft 
 	}
 
 	startTime := time.Now()
-	err = c.client.SendTransaction(context.Background(), signedTx)
+	err = c.client.SendTransaction(c.getBaseContext(), signedTx)
 	c.reportCallMetrics("eth_sendRawTransaction", time.Since(startTime))
 
 	// Handle retry based on error type.
@@ -1158,7 +1324,7 @@ func (c *Client) reportTimeToMine(duration time.Duration) {
 func (c *Client) Accounts() ([]string, error) {
 	var accounts []common.Address
 
-	err := c.rpcClient.Call(&accounts, "eth_accounts")
+	err := c.rpcClient.CallContext(c.getBaseContext(), &accounts, "eth_accounts")
 	if err != nil {
 		c.recordError(err, "eth_accounts")
 
@@ -1185,7 +1351,10 @@ func (c *Client) NewContract(address string, abiStr string) (*Contract, error) {
 		return nil, fmt.Errorf("failed to parse abi: %w", err)
 	}
 
-	contractAddress := common.HexToAddress(address)
+	contractAddress, err := parseHexAddress(address)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Contract{
 		abi:    &contractABI,
@@ -1196,6 +1365,10 @@ func (c *Client) NewContract(address string, abiStr string) (*Contract, error) {
 
 // DeployContract deploys a contract to the blockchain.
 func (c *Client) DeployContract(abiStr string, bytecode string, args ...any) (*Receipt, error) {
+	if err := c.requireSigner(); err != nil {
+		return nil, err
+	}
+
 	contractABI, err := abi.JSON(strings.NewReader(abiStr))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse abi: %w", err)
@@ -1222,7 +1395,7 @@ func (c *Client) DeployContract(abiStr string, bytecode string, args ...any) (*R
 		input = append(input, constructorArgs...)
 	}
 
-	gasPrice, err := c.client.SuggestGasPrice(context.Background())
+	gasPrice, err := c.client.SuggestGasPrice(c.getBaseContext())
 	if err != nil {
 		c.recordError(err, "gas_price")
 
@@ -1276,6 +1449,8 @@ type BlockMonitor struct {
 	unsubscribe   func() error
 	lastBlockTime time.Time
 	wsClient      *ethclient.Client
+	fetchBlock    func(context.Context, common.Hash) (*types.Block, error)
+	emitMetrics   func(block *types.Block, userTxCount int, blockTimeMs float64, blockTimestamp time.Time)
 }
 
 // GetWallet returns wallet information (address and private key).
@@ -1337,16 +1512,33 @@ func convertToWS(url string) string {
 
 // NewBlockMonitor creates a new BlockMonitor for the client.
 func (c *Client) NewBlockMonitor(batchSize int) *BlockMonitor {
+	monitor, err := c.newBlockMonitor(batchSize)
+	if err != nil {
+		if c.vu != nil {
+			jscommon.Throw(c.vu.Runtime(), err)
+		}
+
+		return nil
+	}
+
+	return monitor
+}
+
+func (c *Client) newBlockMonitor(batchSize int) (*BlockMonitor, error) {
 	effectiveBatchSize := batchSize
 	if effectiveBatchSize == 0 {
 		effectiveBatchSize = 1
+	}
+
+	if c.opts == nil || c.opts.URL == "" {
+		return nil, errURLRequired
 	}
 
 	wsURL := convertToWS(c.opts.URL)
 
 	wsClient, err := ethclient.Dial(wsURL)
 	if err != nil {
-		panic(fmt.Errorf("failed to create ws client: %w", err))
+		return nil, fmt.Errorf("failed to create ws client: %w", err)
 	}
 
 	events := make(chan *types.Header)
@@ -1357,20 +1549,24 @@ func (c *Client) NewBlockMonitor(batchSize int) *BlockMonitor {
 	const maxRetries = 10
 
 	for attempt := range maxRetries {
-		sub, err = wsClient.SubscribeNewHead(context.Background(), events)
+		sub, err = wsClient.SubscribeNewHead(c.getBaseContext(), events)
 		if err == nil {
 			break
 		}
 
 		if attempt < maxRetries-1 {
-			waitTime := time.Duration(attempt+1) * 2 * time.Second                                                                       //nolint:gosec,mnd // Safe conversion and retry backoff.
-			fmt.Printf("Failed to subscribe to newHeads (attempt %d/%d): %v. Retrying in %v...\n", attempt+1, maxRetries, err, waitTime) //nolint:forbidigo // Intentional stdout for retry logging.
+			waitTime := time.Duration(attempt+1) * 2 * time.Second //nolint:gosec,mnd // Safe conversion and retry backoff.
+			if logger := c.getLogger(); logger != nil {
+				logger.WithError(err).Warnf("Failed to subscribe to newHeads (attempt %d/%d). Retrying in %v...", attempt+1, maxRetries, waitTime)
+			}
 			time.Sleep(waitTime)
 		}
 	}
 
 	if err != nil {
-		panic(fmt.Errorf("failed to subscribe to newHeads: %w", err))
+		wsClient.Close()
+
+		return nil, fmt.Errorf("failed to subscribe to newHeads: %w", err)
 	}
 
 	unsubscribe := func() error {
@@ -1385,7 +1581,8 @@ func (c *Client) NewBlockMonitor(batchSize int) *BlockMonitor {
 		events:      events,
 		unsubscribe: unsubscribe,
 		wsClient:    wsClient,
-	}
+		fetchBlock:  wsClient.BlockByHash,
+	}, nil
 }
 
 // ProcessBlockEvent processes incoming block headers from the WebSocket subscription and emits metrics.
@@ -1419,11 +1616,22 @@ func (bm *BlockMonitor) handleBlockHeader(header *types.Header) {
 
 	// Get full block to count transactions.
 	startTime := time.Now()
-	block, err := bm.wsClient.BlockByHash(context.Background(), header.Hash())
+	fetchBlock := bm.fetchBlock
+	if fetchBlock == nil && bm.wsClient != nil {
+		fetchBlock = bm.wsClient.BlockByHash
+	}
+
+	if fetchBlock == nil {
+		return
+	}
+
+	block, err := fetchBlock(bm.client.getBaseContext(), header.Hash())
 	bm.client.reportCallMetrics("eth_getBlockByHash", time.Since(startTime))
 
 	if err != nil {
-		fmt.Println("Error getting block:", err) //nolint:all // Intentional stdout for error logging.
+		if logger := bm.client.getLogger(); logger != nil {
+			logger.WithError(err).Warn("Error getting block")
+		}
 
 		return
 	}
@@ -1446,7 +1654,12 @@ func (bm *BlockMonitor) handleBlockHeader(header *types.Header) {
 	// Calculate user operations and block time.
 	blockTimeMs := timeDelta.Seconds() * millisecondsPerSecond
 
-	bm.emitBlockMetrics(block, userTxCount, blockTimeMs, headerTimestamp)
+	emitMetrics := bm.emitMetrics
+	if emitMetrics == nil {
+		emitMetrics = bm.emitBlockMetrics
+	}
+
+	emitMetrics(block, userTxCount, blockTimeMs, headerTimestamp)
 }
 
 func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, blockTimeMs float64, blockTimestamp time.Time) {
@@ -1525,7 +1738,9 @@ func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, bl
 func (bm *BlockMonitor) cleanup() {
 	if bm.unsubscribe != nil {
 		if err := bm.unsubscribe(); err != nil {
-			fmt.Println("Error unsubscribing from block monitor:", err) //nolint:all // Intentional stdout.
+			if logger := bm.client.getLogger(); logger != nil {
+				logger.WithError(err).Warn("Error unsubscribing from block monitor")
+			}
 		}
 	}
 

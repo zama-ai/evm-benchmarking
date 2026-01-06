@@ -3,6 +3,7 @@ package ethereum
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -10,11 +11,12 @@ import (
 	"net/http"
 	"time"
 
+	gethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/grafana/sobek"
-	"go.k6.io/k6/js/common"
+	jscommon "go.k6.io/k6/js/common"
 	"go.k6.io/k6/js/modules"
 	"go.k6.io/k6/metrics"
 )
@@ -22,7 +24,7 @@ import (
 // Static errors for module operations.
 var (
 	errUnableToParseOptions = errors.New("unable to parse options object")
-	errPrivateKeyRequired   = errors.New("Client must be initialized with a private key")
+	errPrivateKeyRequired   = errors.New("private key required for signing")
 	errURLRequired          = errors.New("Client must be initialized with a URL")
 )
 
@@ -74,39 +76,42 @@ func (mi *ModuleInstance) NewClient(call sobek.ConstructorCall) *sobek.Object {
 
 	err := runtime.ExportTo(call.Arguments[0], &optionsArg)
 	if err != nil {
-		common.Throw(runtime, errUnableToParseOptions)
+		jscommon.Throw(runtime, errUnableToParseOptions)
 	}
 
 	opts, err := newOptionsFrom(optionsArg)
 	if err != nil {
-		common.Throw(runtime, fmt.Errorf("invalid options; reason: %w", err))
-	}
-
-	if opts.PrivateKey == "" {
-		common.Throw(runtime, errPrivateKeyRequired)
+		jscommon.Throw(runtime, fmt.Errorf("invalid options; reason: %w", err))
 	}
 
 	if opts.URL == "" {
-		common.Throw(runtime, errURLRequired)
+		jscommon.Throw(runtime, errURLRequired)
 	}
 
-	// Remove 0x prefix if present.
-	privateKeyHex := opts.PrivateKey
-	if len(privateKeyHex) > 2 && privateKeyHex[:2] == "0x" {
-		privateKeyHex = privateKeyHex[2:]
-	}
+	var (
+		privateKey *ecdsa.PrivateKey
+		address    gethcommon.Address
+	)
 
-	privateKeyBytes, err := hex.DecodeString(privateKeyHex)
-	if err != nil {
-		common.Throw(runtime, fmt.Errorf("invalid options; reason: %w", err))
-	}
+	if opts.PrivateKey != "" {
+		// Remove 0x prefix if present.
+		privateKeyHex := opts.PrivateKey
+		if len(privateKeyHex) > 2 && privateKeyHex[:2] == "0x" {
+			privateKeyHex = privateKeyHex[2:]
+		}
 
-	privateKey, err := crypto.ToECDSA(privateKeyBytes)
-	if err != nil {
-		common.Throw(runtime, fmt.Errorf("invalid options; reason: %w", err))
-	}
+		privateKeyBytes, err := hex.DecodeString(privateKeyHex)
+		if err != nil {
+			jscommon.Throw(runtime, fmt.Errorf("invalid options; reason: %w", err))
+		}
 
-	address := crypto.PubkeyToAddress(privateKey.PublicKey)
+		privateKey, err = crypto.ToECDSA(privateKeyBytes)
+		if err != nil {
+			jscommon.Throw(runtime, fmt.Errorf("invalid options; reason: %w", err))
+		}
+
+		address = crypto.PubkeyToAddress(privateKey.PublicKey)
+	}
 
 	// Create both ethclient and raw rpc client.
 	sharedTransport := &http.Transport{
@@ -120,14 +125,14 @@ func (mi *ModuleInstance) NewClient(call sobek.ConstructorCall) *sobek.Object {
 		Transport: sharedTransport,
 	}))
 	if err != nil {
-		common.Throw(runtime, fmt.Errorf("invalid options; reason: %w", err))
+		jscommon.Throw(runtime, fmt.Errorf("invalid options; reason: %w", err))
 	}
 
 	ethClient := ethclient.NewClient(rpcClient)
 
 	chainID, err := ethClient.ChainID(context.Background())
 	if err != nil {
-		common.Throw(runtime, fmt.Errorf("invalid options; reason: %w", err))
+		jscommon.Throw(runtime, fmt.Errorf("invalid options; reason: %w", err))
 	}
 
 	client := &Client{

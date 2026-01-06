@@ -42,6 +42,20 @@ make setup
 This initializes git submodules, installs the xk6 CLI, and prepares
 dependencies.
 
+## Testing
+
+Unit tests (no node required):
+
+```bash
+make test-unit
+```
+
+Integration tests (requires Anvil at `http://127.0.0.1:8545`):
+
+```bash
+make test-integration
+```
+
 ## Project Structure
 
 ```text
