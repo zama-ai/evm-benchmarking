@@ -79,12 +79,12 @@ func TestNewBlockAndBlockTransaction(t *testing.T) {
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 
-	to := common.HexToAddress("0x000000000000000000000000000000000000dEaD")
+	toAddress := common.HexToAddress("0x000000000000000000000000000000000000dEaD")
 	signer := types.LatestSignerForChainID(big.NewInt(1))
 
 	legacyTx := types.NewTx(&types.LegacyTx{
 		Nonce:    1,
-		To:       &to,
+		To:       &toAddress,
 		Value:    big.NewInt(5),
 		Gas:      21000,
 		GasPrice: big.NewInt(1000),
@@ -94,7 +94,7 @@ func TestNewBlockAndBlockTransaction(t *testing.T) {
 
 	dynamicTx := types.NewTx(&types.DynamicFeeTx{
 		Nonce:     2,
-		To:        &to,
+		To:        &toAddress,
 		Value:     big.NewInt(7),
 		Gas:       25000,
 		GasFeeCap: big.NewInt(2000),

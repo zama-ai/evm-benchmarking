@@ -17,12 +17,12 @@ func TestBlockMonitorHandleBlockHeaderEmitsMetricsAfterFirstHeader(t *testing.T)
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 
-	to := common.HexToAddress("0x000000000000000000000000000000000000dEaD")
+	toAddress := common.HexToAddress("0x000000000000000000000000000000000000dEaD")
 	signer := types.LatestSignerForChainID(big.NewInt(1))
 
 	tx1 := types.NewTx(&types.LegacyTx{
 		Nonce:    1,
-		To:       &to,
+		To:       &toAddress,
 		Value:    big.NewInt(1),
 		Gas:      21000,
 		GasPrice: big.NewInt(1000),
@@ -33,7 +33,7 @@ func TestBlockMonitorHandleBlockHeaderEmitsMetricsAfterFirstHeader(t *testing.T)
 	tx2 := types.NewTx(&types.AccessListTx{
 		ChainID:  big.NewInt(1),
 		Nonce:    2,
-		To:       &to,
+		To:       &toAddress,
 		Value:    big.NewInt(2),
 		Gas:      25000,
 		GasPrice: big.NewInt(1),
@@ -64,6 +64,7 @@ func TestBlockMonitorHandleBlockHeaderEmitsMetricsAfterFirstHeader(t *testing.T)
 		batchSize: 2,
 		fetchBlock: func(_ context.Context, _ common.Hash) (*types.Block, error) {
 			fetchCalls++
+
 			return block, nil
 		},
 		emitMetrics: func(_ *types.Block, userTxCount int, blockTimeMs float64, blockTimestamp time.Time) {

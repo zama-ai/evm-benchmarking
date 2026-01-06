@@ -121,6 +121,7 @@ words:
   - envoyproxy
   - ERRO
   - errorkey
+  - errname
   - esbuild
   - eslintcache
   - ethabi
@@ -148,6 +149,7 @@ words:
   - gasleft
   - genproto
   - geth
+  - gethcommon
   - getrandom
   - getfoundry
   - gitleaks
@@ -199,6 +201,7 @@ words:
   - jmoiron
   - joct
   - josharian
+  - jscommon
   - jstypes
   - jumpi
   - keccak
@@ -340,6 +343,7 @@ words:
   - uups
   - valyala
   - viem
+  - Warnf
   - webcrypto
   - wrapcheck
   - xxhash

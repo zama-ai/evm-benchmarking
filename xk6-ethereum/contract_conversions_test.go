@@ -47,16 +47,17 @@ func TestConvertNumber(t *testing.T) {
 		{name: "floatOutOfRange", input: float64(maxSafeInt) + 1, wantErr: true},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := convertNumber(tc.input)
-			if tc.wantErr {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			result, err := convertNumber(testCase.input)
+			if testCase.wantErr {
 				require.Error(t, err)
+
 				return
 			}
 
 			require.NoError(t, err)
-			require.Equal(t, 0, result.Cmp(tc.want))
+			require.Equal(t, 0, result.Cmp(testCase.want))
 		})
 	}
 }
@@ -95,9 +96,13 @@ func TestConvertSequenceFixedArrayAndSlice(t *testing.T) {
 
 	result, err := convertSequence([]any{int64(1), int64(2)}, fixedType)
 	require.NoError(t, err)
+
 	value := reflect.ValueOf(result)
 	require.Equal(t, 2, value.Len())
-	require.Equal(t, int64(1), value.Index(0).Interface().(*big.Int).Int64())
+
+	firstElement, ok := value.Index(0).Interface().(*big.Int)
+	require.True(t, ok)
+	require.Equal(t, int64(1), firstElement.Int64())
 
 	sliceType, err := abi.NewType("address[]", "", nil)
 	require.NoError(t, err)
@@ -126,13 +131,15 @@ func TestConvertTuple(t *testing.T) {
 	}, tupleType)
 	require.NoError(t, err)
 
-	rv := reflect.ValueOf(result)
-	require.Equal(t, tupleType.GetType(), rv.Type())
+	reflectValue := reflect.ValueOf(result)
+	require.Equal(t, tupleType.GetType(), reflectValue.Type())
 
-	addr := rv.Field(0).Interface().(common.Address)
+	addr, ok := reflectValue.Field(0).Interface().(common.Address)
+	require.True(t, ok)
 	require.Equal(t, common.HexToAddress("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"), addr)
 
-	amount := rv.Field(1).Interface().(*big.Int)
+	amount, ok := reflectValue.Field(1).Interface().(*big.Int)
+	require.True(t, ok)
 	require.Equal(t, int64(7), amount.Int64())
 
 	_, err = convertTuple("not-a-tuple", tupleType)
@@ -161,7 +168,7 @@ func TestParseHexAddressAndSafeInt64FromUint64(t *testing.T) {
 	_, err = safeInt64FromUint64(uint64(maxInt64) + 1)
 	require.ErrorIs(t, err, errValueOverflow)
 
-	value, err := safeInt64FromUint64(uint64(maxInt64))
+	value, err := safeInt64FromUint64(maxInt64)
 	require.NoError(t, err)
-	require.Equal(t, int64(maxInt64), value)
+	require.Equal(t, maxInt64, value)
 }

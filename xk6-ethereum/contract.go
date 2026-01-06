@@ -221,6 +221,7 @@ func convertNumber(arg any) (*big.Int, error) {
 		if math.IsNaN(value) || math.IsInf(value, 0) {
 			return nil, fmt.Errorf("%w: got %v", errInvalidNumberType, value)
 		}
+
 		if value > float64(maxSafeInt) || value < float64(minSafeInt) || value != math.Trunc(value) {
 			return nil, fmt.Errorf("%w: number out of safe integer range", errInvalidNumberType)
 		}

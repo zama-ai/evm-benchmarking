@@ -39,6 +39,7 @@ var (
 	errReceiptCancelled     = errors.New("receipt polling cancelled by context")
 	errInvalidAddress       = errors.New("invalid address")
 	errValueOverflow        = errors.New("value out of int64 range")
+	errNegativeValue        = errors.New("value must be non-negative")
 )
 
 // neverClosedChan is a sentinel channel that never closes, used when VU context is nil.
@@ -62,10 +63,10 @@ const (
 )
 
 var (
-	multicallABIOnce  sync.Once
-	multicallABI      abi.ABI
-	multicallValueABI abi.ABI
-	multicallABIError error
+	multicallABIOnce  sync.Once //nolint:gochecknoglobals // Needed for lazy ABI initialization
+	multicallABI      abi.ABI   //nolint:gochecknoglobals // Initialized by sync.Once
+	multicallValueABI abi.ABI   //nolint:gochecknoglobals // Initialized by sync.Once
+	errMulticallABI   error     //nolint:gochecknoglobals,errname // Stores ABI parsing error from sync.Once
 )
 
 // AccessTuple represents a single entry in an EIP-2930 access list.
@@ -167,15 +168,19 @@ func safeInt64FromUint64(value uint64) (int64, error) {
 
 func getMulticallABIs() (abi.ABI, abi.ABI, error) {
 	multicallABIOnce.Do(func() {
-		multicallABI, multicallABIError = abi.JSON(strings.NewReader(aggregate3ABI))
-		if multicallABIError != nil {
+		multicallABI, errMulticallABI = abi.JSON(strings.NewReader(aggregate3ABI))
+		if errMulticallABI != nil {
 			return
 		}
 
-		multicallValueABI, multicallABIError = abi.JSON(strings.NewReader(aggregate3ValueABI))
+		multicallValueABI, errMulticallABI = abi.JSON(strings.NewReader(aggregate3ValueABI))
 	})
 
-	return multicallABI, multicallValueABI, multicallABIError
+	if errMulticallABI != nil {
+		return multicallABI, multicallValueABI, fmt.Errorf("failed to parse multicall ABI: %w", errMulticallABI) //nolint:wrapcheck // Error is wrapped here
+	}
+
+	return multicallABI, multicallValueABI, nil
 }
 
 func (c *Client) reportCallMetrics(endpoint string, duration time.Duration) {
@@ -366,7 +371,7 @@ func (c *Client) GetNonce(address string) (uint64, error) {
 // EstimateGas returns the estimated gas for the given transaction.
 func (c *Client) EstimateGas(transaction Transaction) (uint64, error) {
 	if transaction.Value < 0 {
-		return 0, fmt.Errorf("value must be non-negative")
+		return 0, errNegativeValue
 	}
 
 	// Handle contract creation: empty string To means nil address
@@ -377,7 +382,6 @@ func (c *Client) EstimateGas(transaction Transaction) (uint64, error) {
 		if err != nil {
 			return 0, err
 		}
-
 		toAddr = &addr
 	}
 
@@ -897,6 +901,7 @@ func encodeAggregate3Value(calls []Call3Value) ([]byte, int64, error) {
 	}
 
 	callTuples := make([]call3ValueTuple, len(calls))
+
 	var totalUint uint64
 
 	for i, call := range calls {
@@ -927,7 +932,12 @@ func encodeAggregate3Value(calls []Call3Value) ([]byte, int64, error) {
 		return nil, 0, fmt.Errorf("failed to pack aggregate3Value call: %w", err)
 	}
 
-	return packed, int64(totalUint), nil
+	totalValue, err := safeInt64FromUint64(totalUint)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return packed, totalValue, nil
 }
 
 // convertAccessList converts our AccessTuple slice to go-ethereum's types.AccessList.
@@ -961,7 +971,7 @@ func convertAccessList(accessList []AccessTuple) (types.AccessList, error) {
 // buildTypedTx converts a Transaction into a go-ethereum transaction, estimating gas if needed.
 func (c *Client) buildTypedTx(transaction Transaction) (*types.Transaction, error) {
 	if transaction.Value < 0 {
-		return nil, fmt.Errorf("value must be non-negative")
+		return nil, errNegativeValue
 	}
 	gas := transaction.Gas
 	if gas == 0 {
