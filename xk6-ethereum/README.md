@@ -27,8 +27,20 @@ import eth from "k6/x/ethereum";
 const client = new eth.Client({
   url: "http://127.0.0.1:8545",
   privateKey: "your-private-key-hex", // optional, for signing transactions
+  receiptTimeout: 300000, // optional, milliseconds (default 5 minutes)
+  receiptPollInterval: 100, // optional, milliseconds (default 100ms)
 });
 ```
+
+#### Client Options
+
+- `url` (string, required): Ethereum RPC endpoint.
+- `privateKey` (string, optional): Hex private key for signing (with or without
+  `0x`).
+- `receiptTimeout` (number, optional): Max time to wait for receipt polling, in
+  milliseconds. Defaults to `300000` (5 minutes).
+- `receiptPollInterval` (number, optional): Interval between receipt polls, in
+  milliseconds. Defaults to `100`.
 
 ### Sending Transactions
 
