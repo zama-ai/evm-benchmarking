@@ -100,8 +100,8 @@ func TestConvertSequenceFixedArrayAndSlice(t *testing.T) {
 	value := reflect.ValueOf(result)
 	require.Equal(t, 2, value.Len())
 
-	firstElement, ok := value.Index(0).Interface().(*big.Int)
-	require.True(t, ok)
+	firstElement, isBigInt := value.Index(0).Interface().(*big.Int)
+	require.True(t, isBigInt)
 	require.Equal(t, int64(1), firstElement.Int64())
 
 	sliceType, err := abi.NewType("address[]", "", nil)
@@ -113,8 +113,8 @@ func TestConvertSequenceFixedArrayAndSlice(t *testing.T) {
 	}, sliceType)
 	require.NoError(t, err)
 
-	addresses, ok := result.([]common.Address)
-	require.True(t, ok)
+	addresses, isAddressSlice := result.([]common.Address)
+	require.True(t, isAddressSlice)
 	require.Len(t, addresses, 2)
 }
 
@@ -168,7 +168,7 @@ func TestParseHexAddressAndSafeInt64FromUint64(t *testing.T) {
 	_, err = safeInt64FromUint64(uint64(maxInt64) + 1)
 	require.ErrorIs(t, err, errValueOverflow)
 
-	value, err := safeInt64FromUint64(maxInt64)
+	value, err := safeInt64FromUint64(uint64(maxInt64))
 	require.NoError(t, err)
 	require.Equal(t, maxInt64, value)
 }

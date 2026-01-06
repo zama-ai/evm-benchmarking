@@ -135,7 +135,7 @@ func setupReadOnlyClient() (*Client, error) {
 }
 
 // setupFundedAccount ensures the test account has sufficient funds.
-// If not, it skips the test with a clear error message.
+// If not, it fails the test with a clear error message.
 func setupFundedAccount(t *testing.T, client *Client) {
 	t.Helper()
 
@@ -144,9 +144,7 @@ func setupFundedAccount(t *testing.T, client *Client) {
 
 	// Require at least 1 ETH (1e18 wei) for tests.
 	minBalance := uint64(1e18)
-	if balance < minBalance {
-		t.Skipf("Test account has insufficient funds. Current balance: %d wei. Fund account: %s", balance, client.address.Hex())
-	}
+	require.GreaterOrEqualf(t, balance, minBalance, "Test account has insufficient funds. Current balance: %d wei. Fund account: %s", balance, client.address.Hex())
 }
 
 func TestSetPrivateKey(t *testing.T) {
@@ -883,9 +881,7 @@ func TestNewBlockMonitor(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			monitor, err := client.newBlockMonitor(testCase.batchSize)
-			if err != nil {
-				t.Skipf("block monitor unavailable: %v", err)
-			}
+			require.NoError(t, err)
 
 			require.NotNil(t, monitor)
 			require.Equal(t, client, monitor.client)
@@ -913,9 +909,7 @@ func TestBlockMonitor_PollBlocks(t *testing.T) {
 	// BlockMonitor requires k6 runtime for metrics, so we'll skip detailed testing.
 	// In a real k6 environment, this would work.
 	monitor, err := client.newBlockMonitor(1)
-	if err != nil {
-		t.Skipf("block monitor unavailable: %v", err)
-	}
+	require.NoError(t, err)
 
 	require.NotNil(t, monitor)
 
@@ -1011,18 +1005,14 @@ func TestNonceConflictHandling(t *testing.T) {
 }
 
 func TestMissingNode(t *testing.T) {
-	// Create a client with an invalid URL.
-	invalidURL := "http://127.0.0.1:99999"
+	// Create a client with a valid but non-listening URL.
+	invalidURL := "http://127.0.0.1:94736"
 	privateKeyBytes, _ := hex.DecodeString(testPrivateKey)
 	privateKey, _ := crypto.ToECDSA(privateKeyBytes)
 	address := crypto.PubkeyToAddress(privateKey.PublicKey)
 
 	rpcClient, err := rpc.Dial(invalidURL)
-	if err != nil {
-		t.Skip("Failed to create client with invalid URL (expected)")
-
-		return
-	}
+	require.NoError(t, err)
 
 	ethClient := ethclient.NewClient(rpcClient)
 

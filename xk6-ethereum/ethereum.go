@@ -386,6 +386,7 @@ func (c *Client) EstimateGas(transaction Transaction) (uint64, error) {
 	}
 
 	from := c.address
+
 	if transaction.From != "" {
 		addr, err := parseHexAddress(transaction.From)
 		if err != nil {
@@ -1626,6 +1627,7 @@ func (bm *BlockMonitor) handleBlockHeader(header *types.Header) {
 
 	// Get full block to count transactions.
 	startTime := time.Now()
+
 	fetchBlock := bm.fetchBlock
 	if fetchBlock == nil && bm.wsClient != nil {
 		fetchBlock = bm.wsClient.BlockByHash
