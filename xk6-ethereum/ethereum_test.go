@@ -1578,6 +1578,9 @@ func TestPollForReceipt_Success(t *testing.T) {
 
 	setupFundedAccount(t, client)
 
+	// Refresh nonce manager to avoid conflicts from prior tests that used explicit nonces.
+	_ = globalNonceManager.Refresh(client, client.address)
+
 	// Send a transaction first
 	gasPrice, err := client.GasPrice()
 	require.NoError(t, err)
