@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
 	"strings"
 	"time"
 
@@ -31,10 +32,23 @@ var (
 	errReceiptNotFound      = errors.New("receipt not found")
 	errNoCallsProvided      = errors.New("no calls provided for batch")
 	errWalletNotInitialized = errors.New("wallet not initialized")
+	errReceiptTimeout       = errors.New("receipt polling timed out")
+	errReceiptCancelled     = errors.New("receipt polling cancelled by context")
 )
+
+// neverClosedChan is a sentinel channel that never closes, used when VU context is nil.
+// This is intentionally a package-level variable to avoid allocating a new channel on each call.
+var neverClosedChan = make(chan struct{}) //nolint:gochecknoglobals // Intentional read-only sentinel
 
 // maxTxRetries is the maximum number of retries for transaction submission.
 const maxTxRetries = 3
+
+// Receipt polling configuration.
+const (
+	defaultReceiptTimeout      = 5 * time.Minute
+	defaultReceiptPollInterval = 100 * time.Millisecond // Poll interval for receipt checks
+	maxNetworkRetries          = 5
+)
 
 // AccessTuple represents a single entry in an EIP-2930 access list.
 type AccessTuple struct {
@@ -373,10 +387,10 @@ func (c *Client) SendRawTransaction(transaction Transaction) (string, error) {
 	return txHash, nil
 }
 
-// GetTransactionReceipt returns the transaction receipt for the given transaction hash.
-func (c *Client) GetTransactionReceipt(hash string) (*Receipt, error) {
+// getTransactionReceiptWithContext returns the transaction receipt using the provided context.
+func (c *Client) getTransactionReceiptWithContext(ctx context.Context, hash string) (*Receipt, error) {
 	startTime := time.Now()
-	receipt, err := c.client.TransactionReceipt(context.Background(), common.HexToHash(hash))
+	receipt, err := c.client.TransactionReceipt(ctx, common.HexToHash(hash))
 	c.reportCallMetrics("eth_getTransactionReceipt", time.Since(startTime))
 
 	if err != nil {
@@ -386,12 +400,26 @@ func (c *Client) GetTransactionReceipt(hash string) (*Receipt, error) {
 			return nil, errReceiptNotFound
 		}
 
-		c.recordError(err, "eth_getTransactionReceipt")
-
 		return nil, fmt.Errorf("failed to get transaction receipt: %w", err)
 	}
 
 	return NewReceipt(receipt), nil
+}
+
+// GetTransactionReceipt returns the transaction receipt for the given transaction hash.
+func (c *Client) GetTransactionReceipt(hash string) (*Receipt, error) {
+	receipt, err := c.getTransactionReceiptWithContext(c.getBaseContext(), hash)
+	if err != nil {
+		if errors.Is(err, errReceiptNotFound) {
+			return nil, errReceiptNotFound
+		}
+
+		c.recordError(err, "eth_getTransactionReceipt")
+
+		return nil, err
+	}
+
+	return receipt, nil
 }
 
 // WaitForTransactionReceipt waits for the transaction receipt for the given transaction hash.
@@ -399,41 +427,20 @@ func (c *Client) WaitForTransactionReceipt(hash string) *sobek.Promise {
 	promise, resolve, reject := c.makeHandledPromise()
 	startTime := time.Now()
 
+	timeout := c.getReceiptTimeout()
+
 	go func() {
-		for {
-			receipt, err := c.GetTransactionReceipt(hash)
-			if err != nil {
-				if !errors.Is(err, errReceiptNotFound) {
-					reject(err)
+		receipt, err := c.pollForReceipt(hash, timeout, c.getReceiptPollInterval())
+		if err != nil {
+			reject(err)
 
-					return
-				}
-			}
-
-			if receipt != nil {
-				// If we are testing vu is nil.
-				if c.vu != nil {
-					rootTS := c.runtimeTagSet()
-					// Report metrics.
-					if rootTS != nil {
-						metrics.PushIfNotDone(c.vu.Context(), c.vu.State().Samples, metrics.Sample{
-							TimeSeries: metrics.TimeSeries{
-								Metric: c.metrics.TimeToMine,
-								Tags:   rootTS,
-							},
-							Value: float64(time.Since(startTime) / time.Millisecond),
-							Time:  time.Now(),
-						})
-					}
-				}
-
-				resolve(receipt)
-
-				break
-			}
-
-			time.Sleep(100 * time.Millisecond)
+			return
 		}
+
+		// Report time-to-mine metrics
+		c.reportTimeToMine(time.Since(startTime))
+
+		resolve(receipt)
 	}()
 
 	return promise
@@ -596,7 +603,8 @@ func (c *Client) sendTransactionAndWaitReceiptWithRetries(transaction Transactio
 	err = c.client.SendTransaction(context.Background(), signedTx)
 	c.reportCallMetrics("eth_sendRawTransaction", time.Since(sendStartTime))
 
-	if err != nil && retriesLeft > 0 { //nolint: nestif
+	if err != nil { //nolint: nestif
+		// Try retries if we have retries left
 		if retriesLeft > 0 {
 			switch retryAction(err) {
 			case RetryWithNonce:
@@ -622,48 +630,28 @@ func (c *Client) sendTransactionAndWaitReceiptWithRetries(transaction Transactio
 				return c.sendTransactionAndWaitReceiptWithRetries(transaction, retriesLeft-1)
 
 			case NoRetry:
+				// Fall through to error recording
 			}
 		}
 
+		// Either retriesLeft == 0 or retryAction returned NoRetry
 		c.recordError(err, "eth_sendRawTransaction")
 
 		return nil, fmt.Errorf("failed to send transaction: %w", err)
 	}
 
-	// Poll for receipt using GetTransactionReceipt.
+	// Poll for receipt using the shared helper.
 	txHash := signedTx.Hash().Hex()
 
-	for {
-		receipt, err := c.GetTransactionReceipt(txHash)
-		if err != nil {
-			if !errors.Is(err, errReceiptNotFound) {
-				return nil, fmt.Errorf("failed to get transaction receipt: %w", err)
-			}
-		}
-
-		if receipt != nil {
-			duration := time.Since(startTime)
-
-			if c.vu != nil {
-				rootTS := c.runtimeTagSet()
-				if rootTS != nil {
-					metrics.PushIfNotDone(c.vu.Context(), c.vu.State().Samples, metrics.Sample{
-						TimeSeries: metrics.TimeSeries{
-							Metric: c.metrics.TimeToMine,
-							Tags:   rootTS,
-						},
-						Value: float64(duration / time.Millisecond),
-						Time:  time.Now(),
-					})
-				}
-			}
-
-			return receipt, nil
-		}
-
-		pollInterval := 100 * time.Millisecond
-		time.Sleep(pollInterval)
+	receipt, err := c.pollForReceipt(txHash, c.getReceiptTimeout(), c.getReceiptPollInterval())
+	if err != nil {
+		return nil, err
 	}
+
+	// Report time-to-mine metrics
+	c.reportTimeToMine(time.Since(startTime))
+
+	return receipt, nil
 }
 
 // BatchCallSync batches multiple calls via Multicall3's aggregate3 function.
@@ -962,6 +950,207 @@ func retryAction(err error) RetryAction {
 	}
 
 	return NoRetry
+}
+
+// isTransientNetworkError checks if an error is a transient network error
+// that should be retried during receipt polling.
+func isTransientNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for temporary network errors (type-based, preferred)
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+
+	// Check for net.OpError which covers most transient network issues
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return true
+	}
+
+	// String-based fallback for wrapped errors that don't expose proper types
+	errMsg := strings.ToLower(err.Error())
+
+	return strings.Contains(errMsg, "connection reset") ||
+		strings.Contains(errMsg, "broken pipe") ||
+		strings.Contains(errMsg, "eof")
+}
+
+// receiptPollResult represents the outcome of a single receipt poll attempt.
+type receiptPollResult int
+
+const (
+	pollContinue   receiptPollResult = iota // Receipt not found yet, continue polling
+	pollRetry                               // Transient error, retry with backoff
+	pollFail                                // Non-transient error, fail immediately
+	pollSuccess                             // Receipt found
+	pollMaxRetries                          // Max network retries exceeded
+	pollTimeout                             // Timeout exceeded
+	pollCancelled                           // Context cancelled
+)
+
+// pollForReceipt polls for a transaction receipt with timeout and context awareness.
+// It handles transient network errors with retries and returns the receipt or an error.
+func (c *Client) pollForReceipt(txHash string, timeout, pollInterval time.Duration) (*Receipt, error) {
+	deadline := time.Now().Add(timeout)
+	networkRetries := 0
+
+	for {
+		result, receipt, err := c.pollReceiptOnce(txHash, deadline, &networkRetries)
+
+		switch result {
+		case pollSuccess:
+			return receipt, nil
+
+		case pollContinue:
+			time.Sleep(pollInterval)
+
+		case pollRetry:
+			// Shorter sleep on transient errors
+			time.Sleep(pollInterval / 2)
+
+		case pollTimeout:
+			c.recordError(errReceiptTimeout, "eth_getTransactionReceipt")
+
+			return nil, fmt.Errorf("waiting for receipt of %s after %v: %w (transaction was sent - check block explorer)",
+				txHash, timeout, errReceiptTimeout)
+
+		case pollCancelled:
+			c.recordError(errReceiptCancelled, "eth_getTransactionReceipt")
+
+			return nil, fmt.Errorf("waiting for receipt of %s: %w", txHash, errReceiptCancelled)
+
+		case pollMaxRetries:
+			c.recordError(err, "eth_getTransactionReceipt")
+
+			return nil, fmt.Errorf("max network retries (%d) exceeded while waiting for receipt of %s: %w",
+				maxNetworkRetries, txHash, err)
+
+		case pollFail:
+			return nil, err
+		}
+	}
+}
+
+// pollReceiptOnce performs a single receipt poll and determines the next action.
+func (c *Client) pollReceiptOnce(txHash string, deadline time.Time, networkRetries *int) (receiptPollResult, *Receipt, error) {
+	// Check for context cancellation (scenario ended)
+	select {
+	case <-c.getContextDone():
+		return pollCancelled, nil, nil
+	default:
+	}
+
+	// Check for timeout
+	if time.Now().After(deadline) {
+		return pollTimeout, nil, nil
+	}
+
+	ctx, cancel := c.getContextWithDeadline(deadline)
+	defer cancel()
+
+	receipt, err := c.getTransactionReceiptWithContext(ctx, txHash)
+	if err != nil {
+		switch {
+		case errors.Is(err, errReceiptNotFound):
+			// Expected during polling - continue
+			*networkRetries = 0
+
+			return pollContinue, nil, nil
+
+		case errors.Is(err, context.Canceled):
+			return pollCancelled, nil, nil
+
+		case errors.Is(err, context.DeadlineExceeded):
+			return pollTimeout, nil, nil
+
+		case isTransientNetworkError(err):
+			// Transient network error - retry with limit
+			*networkRetries++
+			if *networkRetries > maxNetworkRetries {
+				return pollMaxRetries, nil, err
+			}
+
+			return pollRetry, nil, nil
+
+		default:
+			// Non-transient error - fail immediately
+			c.recordError(err, "eth_getTransactionReceipt")
+
+			return pollFail, nil, err
+		}
+	}
+
+	if receipt != nil {
+		return pollSuccess, receipt, nil
+	}
+
+	return pollContinue, nil, nil
+}
+
+// getContextDone returns the VU context's Done channel for cancellation.
+func (c *Client) getContextDone() <-chan struct{} {
+	if c.vu != nil {
+		return c.vu.Context().Done()
+	}
+	// Return the sentinel channel that never closes if vu is nil (testing mode)
+	return neverClosedChan
+}
+
+// getBaseContext returns the base context for RPC calls.
+func (c *Client) getBaseContext() context.Context {
+	if c.vu != nil {
+		return c.vu.Context()
+	}
+
+	return context.Background()
+}
+
+// getContextWithDeadline returns a context derived from the VU context with a deadline.
+func (c *Client) getContextWithDeadline(deadline time.Time) (context.Context, context.CancelFunc) {
+	return context.WithDeadline(c.getBaseContext(), deadline)
+}
+
+// getReceiptTimeout returns the configured receipt timeout or the default.
+func (c *Client) getReceiptTimeout() time.Duration {
+	if c.opts != nil && c.opts.ReceiptTimeout > 0 {
+		return c.opts.ReceiptTimeout
+	}
+
+	return defaultReceiptTimeout
+}
+
+// getReceiptPollInterval returns the configured poll interval or the default.
+func (c *Client) getReceiptPollInterval() time.Duration {
+	if c.opts != nil && c.opts.ReceiptPollInterval > 0 {
+		return c.opts.ReceiptPollInterval
+	}
+
+	return defaultReceiptPollInterval
+}
+
+// reportTimeToMine emits the time-to-mine metric for a confirmed transaction.
+func (c *Client) reportTimeToMine(duration time.Duration) {
+	if c.vu == nil {
+		return
+	}
+
+	rootTS := c.runtimeTagSet()
+	if rootTS == nil {
+		return
+	}
+
+	metrics.PushIfNotDone(c.vu.Context(), c.vu.State().Samples, metrics.Sample{
+		TimeSeries: metrics.TimeSeries{
+			Metric: c.metrics.TimeToMine,
+			Tags:   rootTS,
+		},
+		Value: float64(duration / time.Millisecond),
+		Time:  time.Now(),
+	})
 }
 
 // Accounts returns a list of addresses owned by client.
@@ -1350,6 +1539,6 @@ func (bm *BlockMonitor) getContextDone() <-chan struct{} {
 		return bm.client.vu.Context().Done()
 	}
 
-	// Return a channel that never closes if vu is nil.
-	return make(chan struct{})
+	// Return the sentinel channel that never closes if vu is nil (testing mode).
+	return neverClosedChan
 }

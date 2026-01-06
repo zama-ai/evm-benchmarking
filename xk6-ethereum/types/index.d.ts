@@ -6,6 +6,8 @@ declare module "k6/x/ethereum" {
 	export interface Options {
 		url?: string;
 		privateKey?: string; // hex without 0x or with 0x
+		receiptTimeout?: number; // milliseconds, default 300000 (5 min) - timeout for receipt polling
+		receiptPollInterval?: number; // milliseconds, default 100 - interval between receipt poll attempts
 	}
 
 	// EIP-2930 access list entry

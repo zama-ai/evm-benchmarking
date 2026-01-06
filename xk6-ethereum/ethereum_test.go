@@ -1333,3 +1333,326 @@ func TestEstimateGasForContractCreation(t *testing.T) {
 	transferGas := uint64(21000)
 	require.Greater(t, gas, transferGas, "contract creation should require more gas than simple transfer")
 }
+
+// ============================================================================
+// Receipt Polling Resilience Tests
+// ============================================================================
+
+// Test errors for transient network error detection.
+var (
+	errSomeError       = errors.New("some error")
+	errConnectionReset = errors.New("connection reset by peer")
+	errBrokenPipe      = errors.New("broken pipe")
+	errUnexpectedEOF   = errors.New("unexpected eof")
+	errNotFound        = errors.New("not found")
+)
+
+func TestIsTransientNetworkError(t *testing.T) {
+	tests := []struct {
+		name        string
+		err         error
+		isTransient bool
+	}{
+		{
+			name:        "NilError",
+			err:         nil,
+			isTransient: false,
+		},
+		{
+			name:        "RegularError",
+			err:         errSomeError,
+			isTransient: false,
+		},
+		{
+			name:        "ConnectionReset",
+			err:         errConnectionReset,
+			isTransient: true,
+		},
+		{
+			name:        "BrokenPipe",
+			err:         errBrokenPipe,
+			isTransient: true,
+		},
+		{
+			name:        "EOF",
+			err:         errUnexpectedEOF,
+			isTransient: true,
+		},
+		{
+			name:        "NotFoundError",
+			err:         errNotFound,
+			isTransient: false,
+		},
+		{
+			name:        "InvalidNonce",
+			err:         core.ErrNonceTooLow,
+			isTransient: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := isTransientNetworkError(tc.err)
+			require.Equal(t, tc.isTransient, result, "isTransientNetworkError(%v) should be %v", tc.err, tc.isTransient)
+		})
+	}
+}
+
+func TestReceiptPollResultConstants(t *testing.T) {
+	// Verify poll result constants are distinct
+	results := []receiptPollResult{
+		pollContinue,
+		pollRetry,
+		pollFail,
+		pollSuccess,
+		pollMaxRetries,
+		pollTimeout,
+		pollCancelled,
+	}
+
+	seen := make(map[receiptPollResult]bool)
+	for _, r := range results {
+		require.False(t, seen[r], "receiptPollResult constants should be unique")
+		seen[r] = true
+	}
+
+	// Verify specific values for readability
+	require.Equal(t, pollContinue, receiptPollResult(0))
+	require.Equal(t, pollRetry, receiptPollResult(1))
+	require.Equal(t, pollFail, receiptPollResult(2))
+	require.Equal(t, pollSuccess, receiptPollResult(3))
+	require.Equal(t, pollMaxRetries, receiptPollResult(4))
+	require.Equal(t, pollTimeout, receiptPollResult(5))
+	require.Equal(t, pollCancelled, receiptPollResult(6))
+}
+
+func TestGetReceiptTimeout(t *testing.T) {
+	tests := []struct {
+		name     string
+		opts     *options
+		expected time.Duration
+	}{
+		{
+			name:     "NilOptions",
+			opts:     nil,
+			expected: defaultReceiptTimeout,
+		},
+		{
+			name:     "ZeroTimeout",
+			opts:     &options{ReceiptTimeout: 0},
+			expected: defaultReceiptTimeout,
+		},
+		{
+			name:     "CustomTimeout",
+			opts:     &options{ReceiptTimeout: 30 * time.Second},
+			expected: 30 * time.Second,
+		},
+		{
+			name:     "LongTimeout",
+			opts:     &options{ReceiptTimeout: 10 * time.Minute},
+			expected: 10 * time.Minute,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &Client{opts: tc.opts}
+			result := client.getReceiptTimeout()
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestGetReceiptPollInterval(t *testing.T) {
+	tests := []struct {
+		name     string
+		opts     *options
+		expected time.Duration
+	}{
+		{
+			name:     "NilOptions",
+			opts:     nil,
+			expected: defaultReceiptPollInterval,
+		},
+		{
+			name:     "ZeroPollInterval",
+			opts:     &options{ReceiptPollInterval: 0},
+			expected: defaultReceiptPollInterval,
+		},
+		{
+			name:     "CustomPollInterval",
+			opts:     &options{ReceiptPollInterval: 50 * time.Millisecond},
+			expected: 50 * time.Millisecond,
+		},
+		{
+			name:     "LongPollInterval",
+			opts:     &options{ReceiptPollInterval: 500 * time.Millisecond},
+			expected: 500 * time.Millisecond,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &Client{opts: tc.opts}
+			result := client.getReceiptPollInterval()
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestNeverClosedChanIsSentinel(t *testing.T) {
+	// Verify neverClosedChan never closes (non-blocking check)
+	select {
+	case <-neverClosedChan:
+		t.Fatal("neverClosedChan should never close")
+	default:
+	}
+
+	// Verify it's the same channel instance each time (package-level singleton)
+	chan1 := neverClosedChan
+	chan2 := neverClosedChan
+	require.Equal(t, chan1, chan2, "neverClosedChan should be a singleton")
+}
+
+func TestGetContextDone_NilVU(t *testing.T) {
+	client := &Client{vu: nil}
+	done := client.getContextDone()
+
+	// Verify the channel pointer is the same as neverClosedChan
+	// We can't use require.Equal due to type differences (chan vs <-chan), so we verify behavior
+	require.NotNil(t, done, "getContextDone should not return nil")
+
+	// Verify it's non-blocking (doesn't close)
+	select {
+	case <-done:
+		t.Fatal("done channel should not close when vu is nil")
+	default:
+	}
+}
+
+func TestGetBaseContext_NilVU(t *testing.T) {
+	client := &Client{vu: nil}
+	ctx := client.getBaseContext()
+
+	require.NotNil(t, ctx, "getBaseContext should never return nil")
+	require.Equal(t, context.Background(), ctx, "getBaseContext with nil vu should return context.Background()")
+}
+
+func TestGetContextWithDeadline_NilVU(t *testing.T) {
+	client := &Client{vu: nil}
+	deadline := time.Now().Add(1 * time.Second)
+
+	ctx, cancel := client.getContextWithDeadline(deadline)
+	defer cancel()
+
+	require.NotNil(t, ctx)
+
+	// Verify deadline is set
+	ctxDeadline, ok := ctx.Deadline()
+	require.True(t, ok, "context should have a deadline")
+	require.Equal(t, deadline.Unix(), ctxDeadline.Unix())
+}
+
+func TestPollReceiptOnce_Timeout(t *testing.T) {
+	checkNodeAvailable(t)
+
+	client, err := setupClient()
+	require.NoError(t, err)
+
+	// Set deadline in the past to trigger timeout
+	pastDeadline := time.Now().Add(-1 * time.Second)
+	networkRetries := 0
+
+	result, receipt, pollErr := client.pollReceiptOnce("0x1234567890abcdef", pastDeadline, &networkRetries)
+
+	require.Equal(t, pollTimeout, result, "should return pollTimeout for past deadline")
+	require.Nil(t, receipt)
+	require.NoError(t, pollErr)
+}
+
+func TestPollForReceipt_Success(t *testing.T) {
+	checkNodeAvailable(t)
+
+	client, err := setupClient()
+	require.NoError(t, err)
+
+	setupFundedAccount(t, client)
+
+	// Refresh nonce manager to avoid conflicts from prior tests that used explicit nonces.
+	_ = globalNonceManager.Refresh(client, client.address)
+
+	// Send a transaction first
+	gasPrice, err := client.GasPrice()
+	require.NoError(t, err)
+
+	transaction := Transaction{
+		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+		Value:    10,
+		GasPrice: gasPrice,
+	}
+
+	txHash, err := client.SendRawTransaction(transaction)
+	require.NoError(t, err)
+
+	// Poll for the receipt with a reasonable timeout
+	receipt, err := client.pollForReceipt(txHash, 30*time.Second, 100*time.Millisecond)
+	require.NoError(t, err)
+	require.NotNil(t, receipt)
+	require.Equal(t, txHash, receipt.TxHash)
+}
+
+func TestPollForReceipt_ShortTimeout(t *testing.T) {
+	checkNodeAvailable(t)
+
+	client, err := setupClient()
+	require.NoError(t, err)
+
+	// Use a fake transaction hash that won't be found
+	fakeTxHash := "0x0000000000000000000000000000000000000000000000000000000000001234"
+
+	// Poll with a very short timeout
+	receipt, err := client.pollForReceipt(fakeTxHash, 100*time.Millisecond, 50*time.Millisecond)
+
+	require.Error(t, err)
+	require.Nil(t, receipt)
+	require.ErrorIs(t, err, errReceiptTimeout)
+	require.Contains(t, err.Error(), "receipt polling timed out")
+}
+
+func TestClientWithCustomReceiptOptions(t *testing.T) {
+	checkNodeAvailable(t)
+
+	client, err := setupClient()
+	require.NoError(t, err)
+
+	// Modify opts to use custom receipt polling settings
+	client.opts = &options{
+		URL:                 testNodeURL,
+		ReceiptTimeout:      10 * time.Second,
+		ReceiptPollInterval: 200 * time.Millisecond,
+	}
+
+	// Verify the custom settings are used
+	require.Equal(t, 10*time.Second, client.getReceiptTimeout())
+	require.Equal(t, 200*time.Millisecond, client.getReceiptPollInterval())
+}
+
+func TestBlockMonitorGetContextDone_NilVU(t *testing.T) {
+	// Create a BlockMonitor with nil vu (testing mode)
+	bm := &BlockMonitor{
+		client: &Client{vu: nil},
+	}
+
+	done := bm.getContextDone()
+
+	// Verify the channel pointer is the same as neverClosedChan
+	// We can't use require.Equal due to type differences (chan vs <-chan), so we verify behavior
+	require.NotNil(t, done, "BlockMonitor.getContextDone should not return nil")
+
+	// Verify it's non-blocking
+	select {
+	case <-done:
+		t.Fatal("done channel should not close")
+	default:
+	}
+}

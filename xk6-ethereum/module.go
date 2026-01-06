@@ -162,8 +162,10 @@ func registerMetrics(vu modules.VU) ethMetrics {
 
 // options defines configuration options for the client.
 type options struct {
-	URL        string `js:"url"`
-	PrivateKey string `js:"privateKey"`
+	URL                 string        `js:"url"`
+	PrivateKey          string        `js:"privateKey"`
+	ReceiptTimeout      time.Duration `js:"receiptTimeout"`      // Optional: timeout for receipt polling (default: 5 min)
+	ReceiptPollInterval time.Duration `js:"receiptPollInterval"` // Optional: poll interval for receipts (default: 100ms)
 }
 
 // newOptionsFrom validates and instantiates an options struct from its map representation
@@ -185,6 +187,18 @@ func newOptionsFrom(argument map[string]any) (*options, error) {
 	err = decoder.Decode(&opts)
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode options: %w", err)
+	}
+
+	// Convert duration options from milliseconds to Duration.
+	// JSON decodes numbers into time.Duration as nanoseconds (raw int64 value).
+	// Users pass milliseconds (e.g., 300000 for 5 minutes), so we need to convert.
+	// If value is non-zero and less than 1 second (as nanoseconds), assume it's milliseconds.
+	if opts.ReceiptTimeout > 0 && opts.ReceiptTimeout < time.Second {
+		opts.ReceiptTimeout = time.Duration(int64(opts.ReceiptTimeout)) * time.Millisecond
+	}
+
+	if opts.ReceiptPollInterval > 0 && opts.ReceiptPollInterval < time.Second {
+		opts.ReceiptPollInterval = time.Duration(int64(opts.ReceiptPollInterval)) * time.Millisecond
 	}
 
 	return &opts, nil
