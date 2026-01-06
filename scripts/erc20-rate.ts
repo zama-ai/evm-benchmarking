@@ -106,7 +106,7 @@ export default function ({
 }
 
 export function monitor() {
-	// monitoringLoop();
+	monitoringLoop();
 }
 
 export function handleSummary(data: Record<string, unknown>) {
