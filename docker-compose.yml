@@ -34,7 +34,7 @@ services:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_BASIC_ENABLED=false
     volumes:
-      - ./grafana:/etc/grafana/provisioning/
+      - ./grafana:/etc/grafana/provisioning/:z
       - grafana_data:/var/lib/grafana
     depends_on:
       - influxdb
