@@ -189,7 +189,7 @@ func TestReadOnlyClient(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = client.SendTransaction(Transaction{
-		To:    "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+		To:    "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 		Value: 1,
 	})
 	require.ErrorIs(t, err, errPrivateKeyRequired)
@@ -305,7 +305,7 @@ func TestEstimateGas(t *testing.T) {
 		{
 			name: "SimpleTransfer",
 			transaction: Transaction{
-				To:    "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+				To:    "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 				Value: 10,
 			},
 			expectGas: true,
@@ -313,7 +313,7 @@ func TestEstimateGas(t *testing.T) {
 		{
 			name: "WithData",
 			transaction: Transaction{
-				To:    "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+				To:    "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 				Value: 0,
 				Input: []byte{0x12, 0x34, 0x56},
 			},
@@ -351,7 +351,7 @@ func TestSendRawTransaction(t *testing.T) {
 	require.NoError(t, err)
 
 	transaction := Transaction{
-		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 		Value:    10,
 		GasPrice: gasPrice,
 		Nonce:    nonce,
@@ -376,7 +376,7 @@ func TestSendTransactionSync(t *testing.T) {
 	require.NoError(t, err)
 
 	transaction := Transaction{
-		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 		Value:    10,
 		GasPrice: gasPrice,
 		// Nonce will be acquired automatically.
@@ -401,7 +401,7 @@ func TestGetTransactionReceipt(t *testing.T) {
 	require.NoError(t, err)
 
 	transaction := Transaction{
-		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 		Value:    10,
 		GasPrice: gasPrice,
 	}
@@ -432,7 +432,7 @@ func TestSendTransaction(t *testing.T) {
 
 	transaction := Transaction{
 		From:     client.address.Hex(),
-		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 		Value:    10,
 		GasPrice: gasPrice,
 		Gas:      21000,
@@ -457,7 +457,7 @@ func TestSendTransactionAndWaitReceipt(t *testing.T) {
 	require.NoError(t, err)
 
 	transaction := Transaction{
-		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 		Value:    10,
 		GasPrice: gasPrice,
 		// Nonce will be acquired automatically.
@@ -492,12 +492,12 @@ func TestBatchCallSync(t *testing.T) {
 
 	calls := []Call3{
 		{
-			Target:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+			Target:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 			AllowFailure: false,
 			Calldata:     []byte{0x12, 0x34},
 		},
 		{
-			Target:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+			Target:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 			AllowFailure: true,
 			Calldata:     []byte{0x56, 0x78},
 		},
@@ -532,7 +532,7 @@ func TestBatchCallValueSync(t *testing.T) {
 
 	calls := []Call3Value{
 		{
-			Target:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+			Target:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 			AllowFailure: false,
 			Value:        10,
 			Calldata:     []byte{},
@@ -583,7 +583,7 @@ func TestNewContract(t *testing.T) {
 
 	// Simple ERC20-like ABI for testing.
 	abiStr := `[{"type":"function","name":"balanceOf","inputs":[{"name":"account","type":"address"}],"outputs":[{"name":"","type":"uint256"}]}]`
-	address := "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+	address := "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2"
 
 	contract, err := client.NewContract(address, abiStr)
 	require.NoError(t, err)
@@ -599,7 +599,7 @@ func TestEncodeABIConversions(t *testing.T) {
 
 	abiStr := `[{"type":"function","name":"transfer","inputs":[{"name":"to","type":"address"},{"name":"amount","type":"uint256"}],"outputs":[{"name":"","type":"bool"}]}]`
 
-	contract, err := client.NewContract("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb", abiStr)
+	contract, err := client.NewContract("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2", abiStr)
 	require.NoError(t, err)
 
 	calldata, err := contract.EncodeABI("transfer", "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", int64(1))
@@ -757,7 +757,7 @@ func TestEncodeABIWithTuple(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			contract, err := client.NewContract("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb", testCase.abiStr)
+			contract, err := client.NewContract("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2", testCase.abiStr)
 			require.NoError(t, err)
 
 			calldata, err := contract.EncodeABI(testCase.method, testCase.args...)
@@ -796,7 +796,7 @@ func TestEncodeABIWithTupleErrors(t *testing.T) {
 		"outputs": []
 	}]`
 
-	contract, err := client.NewContract("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb", abiStr)
+	contract, err := client.NewContract("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2", abiStr)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -985,7 +985,7 @@ func TestNonceConflictHandling(t *testing.T) {
 
 	// Send first transaction
 	tx1 := Transaction{
-		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 		Value:    10,
 		GasPrice: gasPrice,
 		Nonce:    nonce,
@@ -999,7 +999,7 @@ func TestNonceConflictHandling(t *testing.T) {
 	// The NonceManager should handle this, but if we explicitly use the same nonce,
 	// it should either fail or the manager should refresh
 	tx2 := Transaction{
-		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 		Value:    10,
 		GasPrice: gasPrice,
 		Nonce:    nonce, // Same nonce
@@ -1238,7 +1238,7 @@ func TestBuildTypedTxWithAccessList(t *testing.T) {
 
 	accessList := []AccessTuple{
 		{
-			Address: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+			Address: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 			StorageKeys: []string{
 				"0x0000000000000000000000000000000000000000000000000000000000000001",
 			},
@@ -1246,7 +1246,7 @@ func TestBuildTypedTxWithAccessList(t *testing.T) {
 	}
 
 	transaction := Transaction{
-		To:         "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+		To:         "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 		Value:      1000,
 		Gas:        21000,
 		Nonce:      1,
@@ -1262,7 +1262,7 @@ func TestBuildTypedTxWithAccessList(t *testing.T) {
 
 	// Verify access list is included.
 	require.Len(t, builtTx.AccessList(), 1)
-	require.Equal(t, common.HexToAddress("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"), builtTx.AccessList()[0].Address)
+	require.Equal(t, common.HexToAddress("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2"), builtTx.AccessList()[0].Address)
 	require.Len(t, builtTx.AccessList()[0].StorageKeys, 1)
 	require.Equal(t, common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001"), builtTx.AccessList()[0].StorageKeys[0])
 }
@@ -1275,7 +1275,7 @@ func TestBuildTypedTxWithoutAccessList(t *testing.T) {
 
 	// Transaction without access list and without EIP-1559 fields should be Legacy.
 	transaction := Transaction{
-		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 		Value:    1000,
 		Gas:      21000,
 		GasPrice: 1000000000, // 1 gwei
@@ -1297,9 +1297,10 @@ func TestEstimateGasWithAccessList(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test that EstimateGas works with access list.
+	// Use Value: 0 to avoid requiring funded account - this test is about access lists, not transfers.
 	accessList := []AccessTuple{
 		{
-			Address: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+			Address: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 			StorageKeys: []string{
 				"0x0000000000000000000000000000000000000000000000000000000000000001",
 			},
@@ -1307,8 +1308,8 @@ func TestEstimateGasWithAccessList(t *testing.T) {
 	}
 
 	transaction := Transaction{
-		To:         "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-		Value:      1000,
+		To:         "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
+		Value:      0,
 		AccessList: accessList,
 	}
 
@@ -1318,8 +1319,8 @@ func TestEstimateGasWithAccessList(t *testing.T) {
 
 	// Gas with access list may differ from without, but both should work.
 	transactionNoAccessList := Transaction{
-		To:    "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-		Value: 1000,
+		To:    "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
+		Value: 0,
 	}
 	gasNoAccessList, err := client.EstimateGas(transactionNoAccessList)
 	require.NoError(t, err)
@@ -1357,12 +1358,12 @@ func TestBuildTypedTxForContractCreation(t *testing.T) {
 	require.Nil(t, builtTx.To(), "contract creation transaction should have nil To address")
 
 	// Test that non-empty To field results in non-nil address.
-	transaction.To = "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+	transaction.To = "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2"
 	builtTx, err = client.buildTypedTx(transaction)
 	require.NoError(t, err)
 	require.NotNil(t, builtTx)
 	require.NotNil(t, builtTx.To(), "regular transaction should have non-nil To address")
-	require.Equal(t, common.HexToAddress("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"), *builtTx.To())
+	require.Equal(t, common.HexToAddress("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2"), *builtTx.To())
 }
 
 func TestEstimateGasForContractCreation(t *testing.T) {
@@ -1643,7 +1644,7 @@ func TestPollForReceipt_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	transaction := Transaction{
-		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+		To:       "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2",
 		Value:    10,
 		GasPrice: gasPrice,
 	}

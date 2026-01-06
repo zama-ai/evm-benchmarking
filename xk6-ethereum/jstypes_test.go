@@ -109,6 +109,7 @@ func TestNewBlockAndBlockTransaction(t *testing.T) {
 		GasLimit:   1000000,
 		Difficulty: big.NewInt(1),
 		BaseFee:    big.NewInt(100),
+		UncleHash:  types.EmptyUncleHash,
 	}
 
 	body := &types.Body{
@@ -131,13 +132,13 @@ func TestNewBlockAndBlockTransaction(t *testing.T) {
 	require.Len(t, wrapped.Transactions, 2)
 
 	legacyWrapped := NewBlockTransaction(legacyTx)
-	require.Equal(t, types.LegacyTxType, legacyWrapped.Type)
+	require.Equal(t, uint8(types.LegacyTxType), legacyWrapped.Type)
 	require.NotEmpty(t, legacyWrapped.From)
 	require.Equal(t, legacyTx.GasPrice().String(), legacyWrapped.GasPrice)
 	require.Equal(t, legacyTx.Value().String(), legacyWrapped.Value)
 
 	dynamicWrapped := NewBlockTransaction(dynamicTx)
-	require.Equal(t, types.DynamicFeeTxType, dynamicWrapped.Type)
+	require.Equal(t, uint8(types.DynamicFeeTxType), dynamicWrapped.Type)
 	require.NotEmpty(t, dynamicWrapped.From)
 	require.Equal(t, dynamicTx.GasFeeCap().String(), dynamicWrapped.MaxFeePerGas)
 	require.Equal(t, dynamicTx.GasTipCap().String(), dynamicWrapped.MaxPriorityFeePerGas)
