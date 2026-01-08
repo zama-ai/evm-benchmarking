@@ -10,7 +10,6 @@ import (
 	"github.com/btcsuite/btcd/btcutil/hdkeychain"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/tyler-smith/go-bip39"
 	"go.k6.io/k6/js/modules"
@@ -190,12 +189,17 @@ var (
 // ComputeMappingSlot computes the storage slot for a Solidity mapping entry.
 // For mapping(address => T) at baseSlot, the slot for key is keccak256(abi.encode(key, baseSlot)).
 func (w *Wallet) ComputeMappingSlot(key string, baseSlot int64) (string, error) {
+	addr, err := parseHexAddress(key)
+	if err != nil {
+		return "", err
+	}
+
 	args := abi.Arguments{
 		{Type: abiAddress},
 		{Type: abiUint256},
 	}
 
-	encoded, err := args.Pack(common.HexToAddress(key), big.NewInt(baseSlot))
+	encoded, err := args.Pack(addr, big.NewInt(baseSlot))
 	if err != nil {
 		return "", fmt.Errorf("failed to encode mapping slot: %w", err)
 	}
@@ -207,13 +211,23 @@ func (w *Wallet) ComputeMappingSlot(key string, baseSlot int64) (string, error) 
 // For mapping(address => mapping(address => T)) at baseSlot,
 // the slot for [key1][key2] is keccak256(abi.encode(key2, keccak256(abi.encode(key1, baseSlot)))).
 func (w *Wallet) ComputeNestedMappingSlot(key1, key2 string, baseSlot int64) (string, error) {
+	addr1, err := parseHexAddress(key1)
+	if err != nil {
+		return "", err
+	}
+
+	addr2, err := parseHexAddress(key2)
+	if err != nil {
+		return "", err
+	}
+
 	// Compute intermediate slot: keccak256(abi.encode(key1, baseSlot))
 	args1 := abi.Arguments{
 		{Type: abiAddress},
 		{Type: abiUint256},
 	}
 
-	encoded1, err := args1.Pack(common.HexToAddress(key1), big.NewInt(baseSlot))
+	encoded1, err := args1.Pack(addr1, big.NewInt(baseSlot))
 	if err != nil {
 		return "", fmt.Errorf("failed to encode first mapping: %w", err)
 	}
@@ -226,7 +240,7 @@ func (w *Wallet) ComputeNestedMappingSlot(key1, key2 string, baseSlot int64) (st
 		{Type: abiBytes32},
 	}
 
-	encoded2, err := args2.Pack(common.HexToAddress(key2), intermediateSlot)
+	encoded2, err := args2.Pack(addr2, intermediateSlot)
 	if err != nil {
 		return "", fmt.Errorf("failed to encode nested mapping: %w", err)
 	}

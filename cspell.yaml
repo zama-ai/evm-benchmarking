@@ -56,8 +56,8 @@ words:
   - bytebufferpool
   - bytemuck
   - byzantinium
-  - CALDATACOPY
   - cachedir
+  - CALDATACOPY
   - callcode
   - capwords
   - cascadia
@@ -119,6 +119,8 @@ words:
   - elif
   - envconfig
   - envoyproxy
+  - equalf
+  - errname
   - ERRO
   - errorkey
   - esbuild
@@ -147,9 +149,10 @@ words:
   - funlen
   - gasleft
   - genproto
-  - geth
-  - getrandom
   - getfoundry
+  - geth
+  - gethcommon
+  - getrandom
   - gitleaks
   - gjson
   - glog
@@ -199,6 +202,7 @@ words:
   - jmoiron
   - joct
   - josharian
+  - jscommon
   - jstypes
   - jumpi
   - keccak
@@ -340,6 +344,7 @@ words:
   - uups
   - valyala
   - viem
+  - Warnf
   - webcrypto
   - wrapcheck
   - xxhash

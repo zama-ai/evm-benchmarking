@@ -132,8 +132,7 @@ jobs:
           exit 1
 
       - name: Run Go tests
-        working-directory: xk6-ethereum
-        run: go test -v -race -coverprofile=coverage.out
+        run: make test-integration TEST_FLAGS='-v -race -coverprofile=xk6-ethereum/coverage.out'
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4

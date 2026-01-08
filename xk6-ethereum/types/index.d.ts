@@ -4,8 +4,8 @@ declare module "k6/x/ethereum" {
 	export type EthBigInt = string; // decimal or 0x-prefixed hex
 
 	export interface Options {
-		url?: string;
-		privateKey?: string; // hex without 0x or with 0x
+		url: string;
+		privateKey?: string; // hex without 0x or with 0x; required for signing methods
 		receiptTimeout?: number; // milliseconds, default 300000 (5 min) - timeout for receipt polling
 		receiptPollInterval?: number; // milliseconds, default 100 - interval between receipt poll attempts
 	}
@@ -20,6 +20,7 @@ declare module "k6/x/ethereum" {
 		from?: string;
 		to: string;
 		input?: Uint8Array;
+		// NOTE: numeric fields must fit JS safe integer range.
 		gasPrice?: number;
 		gasFeeCap?: number;
 		gasTipCap?: number;
@@ -59,6 +60,7 @@ declare module "k6/x/ethereum" {
 	}
 
 	export interface TxnOpts {
+		// NOTE: numeric fields must fit JS safe integer range.
 		value?: number;
 		gasPrice?: number;
 		gasLimit?: number;
@@ -125,10 +127,12 @@ declare module "k6/x/ethereum" {
 		setPrivateKey(privateKey: string): void;
 		gasPrice(): number;
 		// blockNumber: use null/undefined for latest, or a specific block number
+		// Throws if address is invalid.
 		getBalance(address: string, blockNumber?: number | null): number;
 		blockNumber(): number;
 		// number: use null/undefined for latest block
 		getBlockByNumber(number?: number | null): Block;
+		// Throws if address is invalid.
 		getNonce(address: string): number;
 		estimateGas(tx: Transaction): number;
 		sendTransaction(tx: Transaction): string;

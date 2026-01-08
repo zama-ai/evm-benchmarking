@@ -4,6 +4,7 @@ BUILD_DIR = build
 K6_OUTPUT = $(BUILD_DIR)/k6
 GO_SRCS := $(shell find xk6-ethereum xk6-queue -name "*.go" -o -name "go.mod" -o -name "go.sum")
 export COMMIT := $(shell git rev-parse --short HEAD)
+TEST_FLAGS ?=
 
 .PHONY: all
 all: build
@@ -38,6 +39,14 @@ build-contracts:
 	@cd contracts && bash scripts/setup-gateway-addresses.sh
 	@echo "Compiling Foundry contracts..."
 	@cd contracts && forge build
+
+.PHONY: test-unit
+test-unit:
+	@go test $(TEST_FLAGS) ./xk6-ethereum
+
+.PHONY: test-integration
+test-integration:
+	@go test -tags=integration $(TEST_FLAGS) ./xk6-ethereum
 
 # ==============================================================================
 # Scenarios
@@ -89,4 +98,6 @@ help:
 	@echo "  run-erc20                - Run ERC20 transfer benchmark (deploys ERC20 in setup, sync tx)"
 	@echo "  run-arbitrary-execution  - Run arbitrary execution benchmark (N_SSTORE, N_EVENTS, or CALLDATA_SIZE)"
 	@echo "  refund                   - Refund ETH from test accounts (fast, uses bun+viem)"
+	@echo "  test-unit                - Run Go unit tests (no node required)"
+	@echo "  test-integration         - Run Go integration tests (requires Anvil at 127.0.0.1:8545)"
 	@echo "  help                     - Show this help"

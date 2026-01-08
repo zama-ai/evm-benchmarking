@@ -26,7 +26,7 @@ import eth from "k6/x/ethereum";
 
 const client = new eth.Client({
   url: "http://127.0.0.1:8545",
-  privateKey: "your-private-key-hex", // optional, for signing transactions
+  privateKey: "your-private-key-hex", // optional, required for signing transactions
   receiptTimeout: 300000, // optional, milliseconds (default 5 minutes)
   receiptPollInterval: 100, // optional, milliseconds (default 100ms)
 });
@@ -36,11 +36,14 @@ const client = new eth.Client({
 
 - `url` (string, required): Ethereum RPC endpoint.
 - `privateKey` (string, optional): Hex private key for signing (with or without
-  `0x`).
+  `0x`). Required for transaction signing methods.
 - `receiptTimeout` (number, optional): Max time to wait for receipt polling, in
   milliseconds. Defaults to `300000` (5 minutes).
 - `receiptPollInterval` (number, optional): Interval between receipt polls, in
   milliseconds. Defaults to `100`.
+
+If `privateKey` is omitted, the client can still perform read-only calls and
+monitoring, but signing methods will throw unless you call `setPrivateKey()`.
 
 ### Sending Transactions
 
@@ -133,17 +136,23 @@ const account = wallet.accountFromPrivateKey("0x...");
 The extension collects and exports the following metrics to InfluxDB (via
 xk6-output-influxdb or compatible outputs):
 
-| Metric                  | Type  | Description                                              |
-| ----------------------- | ----- | -------------------------------------------------------- |
-| `ethereum_block`        | Gauge | Current block number observed during monitoring          |
-| `ethereum_tps`          | Gauge | Transactions per second (mined in each block)            |
-| `ethereum_time_to_mine` | Trend | Time from transaction submission to block inclusion (ms) |
-| `ethereum_req_duration` | Trend | Duration of individual RPC calls (ms)                    |
+| Metric                        | Type    | Description                                              |
+| ----------------------------- | ------- | -------------------------------------------------------- |
+| `ethereum_block_count`        | Counter | Count of blocks observed                                 |
+| `ethereum_block_number`       | Trend   | Current block number observed during monitoring          |
+| `ethereum_block_transactions` | Trend   | User transaction count per block                         |
+| `ethereum_uops`               | Trend   | User ops per block (batchSize \* tx count)               |
+| `ethereum_gas_used`           | Trend   | Gas used per block                                       |
+| `ethereum_block_time`         | Trend   | Block time delta (ms)                                    |
+| `ethereum_time_to_mine`       | Trend   | Time from transaction submission to block inclusion (ms) |
+| `ethereum_req_duration`       | Trend   | Duration of individual RPC calls (ms)                    |
+| `ethereum_errors`             | Counter | RPC errors by method                                     |
 
 ### Block Monitoring
 
-To collect block-level metrics (`ethereum_block`, `ethereum_tps`), use the block
-monitor in a dedicated scenario:
+To collect block-level metrics (for example `ethereum_block_count`,
+`ethereum_block_number`, `ethereum_block_transactions`), use the block monitor
+in a dedicated scenario:
 
 ```typescript
 const monitor = client.newBlockMonitor(10); // batch size
@@ -155,6 +164,9 @@ export function monitorBlocks() {
 
 The monitor subscribes to new block headers and calculates TPS based on
 transaction counts per block.
+
+Note: `newBlockMonitor()` will throw if the WebSocket connection or subscription
+fails.
 
 ## API Reference
 

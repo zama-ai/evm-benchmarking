@@ -1,10 +1,10 @@
 package ethereum
 
 import (
-	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"reflect"
 	"strconv"
@@ -26,8 +26,13 @@ var (
 	errInvalidArrayType          = errors.New("expected array type")
 	errInvalidArrayLength        = errors.New("expected array length mismatch")
 	errInvalidAddressType        = errors.New("expected address type")
-	errInvalidNumberType         = errors.New("expected int64 or string type")
+	errInvalidNumberType         = errors.New("expected number or string type")
 	errInvalidBytesType          = errors.New("expected hex string or bytes type")
+)
+
+const (
+	maxSafeInt = 9007199254740991
+	minSafeInt = -9007199254740991
 )
 
 // Contract exposes a contract.
@@ -196,7 +201,7 @@ func convertTuple(arg any, typ abi.Type) (any, error) {
 func convertAddress(arg any) (common.Address, error) {
 	switch v := arg.(type) {
 	case string:
-		return common.HexToAddress(v), nil
+		return parseHexAddress(v)
 	default:
 		return common.Address{}, fmt.Errorf("%w: got %T", errInvalidAddressType, arg)
 	}
@@ -206,12 +211,44 @@ func convertAddress(arg any) (common.Address, error) {
 // Returns an error if the argument is not a int64.
 func convertNumber(arg any) (*big.Int, error) {
 	switch value := arg.(type) {
+	case int:
+		return big.NewInt(int64(value)), nil
 	case int64:
 		return big.NewInt(value), nil
+	case uint64:
+		return new(big.Int).SetUint64(value), nil
+	case float64:
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return nil, fmt.Errorf("%w: got %v", errInvalidNumberType, value)
+		}
+
+		if value > float64(maxSafeInt) || value < float64(minSafeInt) || value != math.Trunc(value) {
+			return nil, fmt.Errorf("%w: number out of safe integer range", errInvalidNumberType)
+		}
+
+		return big.NewInt(int64(value)), nil
 	case *big.Int:
 		return value, nil
 	case big.Int:
 		return &value, nil
+	case string:
+		clean := strings.TrimSpace(value)
+		if clean == "" {
+			return nil, fmt.Errorf("%w: empty string", errInvalidNumberType)
+		}
+
+		base := 10
+		if strings.HasPrefix(clean, "0x") || strings.HasPrefix(clean, "0X") {
+			base = 16
+			clean = clean[2:]
+		}
+
+		num, ok := new(big.Int).SetString(clean, base)
+		if !ok {
+			return nil, fmt.Errorf("%w: %q", errInvalidNumberType, value)
+		}
+
+		return num, nil
 	default:
 		return nil, fmt.Errorf("%w: got %T", errInvalidNumberType, arg)
 	}
@@ -258,7 +295,12 @@ func (c *Contract) Call(method string, args ...any) (map[string]any, error) {
 		return nil, errContractNotInitialized
 	}
 
-	input, err := c.abi.Pack(method, args...)
+	converted, err := convertArgs(c.abi, method, args)
+	if err != nil {
+		return nil, err
+	}
+
+	input, err := c.abi.Pack(method, converted...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to pack call data: %w", err)
 	}
@@ -269,7 +311,7 @@ func (c *Contract) Call(method string, args ...any) (map[string]any, error) {
 	}
 
 	startTime := time.Now()
-	output, err := c.client.client.CallContract(context.Background(), msg, nil)
+	output, err := c.client.client.CallContract(c.client.getBaseContext(), msg, nil)
 	c.client.reportCallMetrics("eth_call", time.Since(startTime))
 
 	if err != nil {
@@ -336,13 +378,18 @@ func (c *Contract) Txn(method string, opts TxnOpts, args ...any) (string, error)
 		return "", fmt.Errorf("failed to encode ABI: %w", err)
 	}
 
+	value, err := safeInt64FromUint64(opts.Value)
+	if err != nil {
+		return "", err
+	}
+
 	// Build transaction request.
 	transaction := Transaction{
 		To:         c.addr.Hex(),
 		Input:      input,
 		GasPrice:   opts.GasPrice,
 		Gas:        opts.GasLimit,
-		Value:      int64(opts.Value), //nolint:gosec // Value is bounded by uint64.
+		Value:      value,
 		Nonce:      opts.Nonce,
 		AccessList: opts.AccessList,
 	}
@@ -364,13 +411,18 @@ func (c *Contract) TxnSync(method string, opts TxnOpts, args ...any) (*Receipt, 
 		return nil, fmt.Errorf("failed to encode ABI: %w", err)
 	}
 
+	value, err := safeInt64FromUint64(opts.Value)
+	if err != nil {
+		return nil, err
+	}
+
 	// Build transaction request; gas is estimated inside SendTransactionSync path.
 	transaction := Transaction{
 		To:         c.addr.Hex(),
 		Input:      input,
 		GasPrice:   opts.GasPrice,
 		Gas:        opts.GasLimit,
-		Value:      int64(opts.Value), //nolint:gosec // Value is bounded by uint64.
+		Value:      value,
 		Nonce:      opts.Nonce,
 		AccessList: opts.AccessList,
 	}
@@ -392,13 +444,18 @@ func (c *Contract) TxnAndWaitReceipt(method string, opts TxnOpts, args ...any) (
 		return nil, fmt.Errorf("failed to encode ABI: %w", err)
 	}
 
+	value, err := safeInt64FromUint64(opts.Value)
+	if err != nil {
+		return nil, err
+	}
+
 	// Build transaction request; gas is estimated inside SendTransactionAndWaitReceipt path.
 	transaction := Transaction{
 		To:         c.addr.Hex(),
 		Input:      input,
 		GasPrice:   opts.GasPrice,
 		Gas:        opts.GasLimit,
-		Value:      int64(opts.Value), //nolint:gosec // Value is bounded by uint64.
+		Value:      value,
 		Nonce:      opts.Nonce,
 		AccessList: opts.AccessList,
 	}

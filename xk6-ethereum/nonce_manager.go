@@ -1,7 +1,6 @@
 package ethereum
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -50,7 +49,7 @@ func (manager *NonceManager) Acquire(client *Client, addr common.Address) (uint6
 	defer entry.mu.Unlock()
 
 	if !entry.initialized {
-		nonce, err := client.client.PendingNonceAt(context.Background(), addr)
+		nonce, err := client.client.PendingNonceAt(client.getBaseContext(), addr)
 		if err != nil {
 			return 0, fmt.Errorf("failed to get nonce: %w", err)
 		}
@@ -79,7 +78,7 @@ func (manager *NonceManager) Refresh(client *Client, addr common.Address) error 
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 
-	nonce, err := client.client.PendingNonceAt(context.Background(), addr)
+	nonce, err := client.client.PendingNonceAt(client.getBaseContext(), addr)
 	if err != nil {
 		// Mark uninitialized so a subsequent Acquire can retry initialization.
 		entry.initialized = false
