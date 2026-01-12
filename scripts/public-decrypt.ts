@@ -11,7 +11,11 @@ import {
 	refundTestAccounts,
 } from "../helpers/init.ts";
 import { monitoringLoop } from "../helpers/monitoring.ts";
-import { CONFIG, getScenarios } from "../helpers/scenarios.ts";
+import {
+	CONFIG,
+	getMaxIterationsPerVu,
+	getScenarios,
+} from "../helpers/scenarios.ts";
 
 // ======================= CONTRACT ARTIFACTS =======================
 const CONTRACT_ABI = String(
@@ -134,11 +138,10 @@ function createDecryptionCallData(
 
 	// Create unique decryptionOffset using VU ID, iteration, and batch index
 	// Multipliers are calculated dynamically based on test parameters:
-	// - CONFIG.rate * duration: conservative estimate of max iterations per VU
+	// - getMaxIterationsPerVu(): scenario-aware max iterations per VU
 	// - CONFIG.batchSize: number of calls per batch
 	// Formula: VU_ID * (max_iterations * batchSize) + iteration * batchSize + batchIndex
-	const durationSeconds = CONFIG.duration;
-	const maxIterationsPerVu = BigInt(CONFIG.rate * durationSeconds);
+	const maxIterationsPerVu = BigInt(getMaxIterationsPerVu());
 	const iterationMultiplier =
 		BigInt(maxIterationsPerVu) * BigInt(CONFIG.batchSize);
 	const batchMultiplier = BigInt(CONFIG.batchSize);

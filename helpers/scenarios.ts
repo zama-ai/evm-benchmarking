@@ -13,31 +13,72 @@ if (SCENARIO_TYPE === "stress") {
 	maxRate *= 2;
 }
 
+// For shared-iterations scenario type
+const NUM_ITERATIONS = Number(__ENV.NUM_ITERATIONS) || 0;
+const NUM_VUS = Number(__ENV.NUM_VUS) || 50;
+const MAX_DURATION = Number(__ENV.MAX_DURATION) || 600;
+// p(95) iteration duration threshold in ms (default 2.5s, increase for slow chains like Sepolia)
+const ITERATION_THRESHOLD_MS = Number(__ENV.ITERATION_THRESHOLD_MS) || 2500;
+
 // preAllocatedVUs = [median_iteration_duration * rate] + constant_for_variance
 // see https://grafana.com/docs/k6/latest/using-k6/scenarios/concepts/arrival-rate-vu-allocation/
 const preAllocatedVUs =
 	Math.ceil(MEDIAN_ITERATION_DURATION * maxRate * BUFFER) + 1;
+
+const maxVUs =
+	SCENARIO_TYPE === "shared-iterations" ? NUM_VUS : preAllocatedVUs;
 
 export const CONFIG = {
 	duration: Number(__ENV.DURATION) || 120,
 	rate: EFFECTIVE_RATE,
 	batchSize: BATCH_SIZE,
 	preAllocatedVUs: preAllocatedVUs,
-	maxVUs: preAllocatedVUs,
+	maxVUs: maxVUs,
+	// For shared-iterations
+	numIterations: NUM_ITERATIONS,
+	numVUs: NUM_VUS,
+	maxDuration: MAX_DURATION,
 };
 
-export function getScenarios(scriptName: string) {
-	// Calculate effective rate based on batch size (each iteration sends BATCH_SIZE transactions)
+export function getMaxIterationsPerVu(): number {
+	if (SCENARIO_TYPE === "shared-iterations") {
+		return Math.ceil(CONFIG.numIterations / CONFIG.numVUs);
+	}
 
-	const baseScenario = {
+	return CONFIG.rate * CONFIG.duration;
+}
+
+export function getScenarios(
+	scriptName: string,
+	extraOpts: { iterationCount?: number } = {},
+) {
+	// Calculate effective rate based on batch size (each iteration sends BATCH_SIZE transactions)
+	const effectiveIterations = extraOpts.iterationCount ?? NUM_ITERATIONS;
+
+	const baseArrivalRateScenario = {
 		timeUnit: "1s",
 		preAllocatedVUs: preAllocatedVUs,
 	};
 
 	let mainScenario: Record<string, unknown>;
-	if (SCENARIO_TYPE === "stress") {
+	let monitorDuration: number;
+
+	if (SCENARIO_TYPE === "shared-iterations") {
+		if (effectiveIterations <= 0) {
+			throw new Error(
+				"NUM_ITERATIONS or iterationCount parameter required for shared-iterations",
+			);
+		}
 		mainScenario = {
-			...baseScenario,
+			executor: "shared-iterations",
+			iterations: effectiveIterations,
+			vus: NUM_VUS,
+			maxDuration: `${MAX_DURATION}s`,
+		};
+		monitorDuration = MAX_DURATION;
+	} else if (SCENARIO_TYPE === "stress") {
+		mainScenario = {
+			...baseArrivalRateScenario,
 			executor: "ramping-arrival-rate",
 			startRate: Math.floor(EFFECTIVE_RATE * 0.3), // Start at 30% of the target rate and slowly ramp up to 200%
 			stages: [
@@ -47,19 +88,41 @@ export function getScenarios(scriptName: string) {
 				},
 			],
 		};
+		monitorDuration = CONFIG.duration;
 	} else if (SCENARIO_TYPE === "load") {
 		mainScenario = {
-			...baseScenario,
+			...baseArrivalRateScenario,
 			executor: "constant-arrival-rate",
 			duration: `${CONFIG.duration}s`,
 			rate: EFFECTIVE_RATE,
 		};
+		monitorDuration = CONFIG.duration;
 	} else {
 		throw new Error(`Invalid scenario type: ${SCENARIO_TYPE}`);
 	}
 
 	// Follow grafana "extract field" format
 	const name = `func=${scriptName}, type=${SCENARIO_TYPE}, batch=${BATCH_SIZE}, rate=${EFFECTIVE_RATE}`;
+
+	// Build thresholds - shared-iterations doesn't have dropped_iterations metric
+	const thresholds: Record<string, unknown> = {
+		[`iteration_duration{scenario:${scriptName}}`]: [
+			{
+				threshold: `p(95)<${ITERATION_THRESHOLD_MS}`,
+				abortOnFail: SCENARIO_TYPE === "stress",
+			},
+		],
+	};
+
+	// Only add dropped_iterations threshold for arrival-rate executors
+	if (SCENARIO_TYPE !== "shared-iterations") {
+		thresholds[`dropped_iterations{scenario:${scriptName}}`] = [
+			{
+				threshold: `count<${(EFFECTIVE_RATE * CONFIG.duration) / 10}`,
+				abortOnFail: true,
+			},
+		];
+	}
 
 	return {
 		tags: {
@@ -68,29 +131,14 @@ export function getScenarios(scriptName: string) {
 		},
 		discardResponseBodies: true,
 		systemTags: ["scenario"],
-		// Threshold for 95th percentile latency to be over 2.5 seconds
-		thresholds: {
-			[`iteration_duration{scenario:${scriptName}}`]: [
-				{
-					threshold: "p(95)<2500",
-					abortOnFail: SCENARIO_TYPE === "stress",
-				},
-			],
-			// Fail if dropped iterations exceed 10% of emissions at avg rate
-			[`dropped_iterations{scenario:${scriptName}}`]: [
-				{
-					threshold: `count<${(EFFECTIVE_RATE * CONFIG.duration) / 10}`,
-					abortOnFail: true,
-				},
-			],
-		},
+		thresholds,
 		scenarios: {
 			[scriptName]: mainScenario,
 			block_monitor: {
 				executor: "shared-iterations",
 				exec: "monitor",
-				maxDuration: `${CONFIG.duration + (CONFIG.duration < 10 ? 0 : 10)}s`,
-				VUs: 1,
+				maxDuration: `${monitorDuration + (monitorDuration < 10 ? 0 : 10)}s`,
+				vus: 1,
 			},
 		},
 	};
