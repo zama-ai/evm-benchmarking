@@ -28,6 +28,7 @@ var (
 	errInvalidAddressType        = errors.New("expected address type")
 	errInvalidNumberType         = errors.New("expected number or string type")
 	errInvalidBytesType          = errors.New("expected hex string or bytes type")
+	errIntegerOverflow           = errors.New("integer overflow")
 )
 
 const (
@@ -97,7 +98,13 @@ func convertValue(arg any, typ abi.Type) (any, error) {
 		return convertAddress(arg)
 
 	case abi.UintTy, abi.IntTy:
-		return convertNumber(arg)
+		num, err := convertNumber(arg)
+		if err != nil {
+			return nil, err
+		}
+		// Convert to native type based on ABI type size.
+		// go-ethereum's ABI packer expects native Go types for fixed-size integers.
+		return convertBigIntToNative(num, typ)
 
 	case abi.BytesTy:
 		return convertBytes(arg)
@@ -252,6 +259,42 @@ func convertNumber(arg any) (*big.Int, error) {
 	default:
 		return nil, fmt.Errorf("%w: got %T", errInvalidNumberType, arg)
 	}
+}
+
+// convertBigIntToNative converts a *big.Int to the native Go type expected by the ABI packer.
+// Uses go-ethereum's typ.GetType() to determine the expected type and reflect for overflow checking.
+func convertBigIntToNative(num *big.Int, typ abi.Type) (any, error) {
+	expectedType := typ.GetType()
+
+	// For *big.Int types (uint256, int256), return as-is
+	if expectedType == reflect.TypeFor[*big.Int]() {
+		return num, nil
+	}
+
+	// Create a value of the expected type
+	val := reflect.New(expectedType).Elem()
+
+	//nolint:exhaustive // Only integer types are relevant for ABI numeric conversion
+	switch val.Kind() {
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if !num.IsUint64() || val.OverflowUint(num.Uint64()) {
+			return nil, fmt.Errorf("%w: value %s exceeds %s", errIntegerOverflow, num.String(), expectedType)
+		}
+
+		val.SetUint(num.Uint64())
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if !num.IsInt64() || val.OverflowInt(num.Int64()) {
+			return nil, fmt.Errorf("%w: value %s exceeds %s", errIntegerOverflow, num.String(), expectedType)
+		}
+
+		val.SetInt(num.Int64())
+
+	default:
+		return num, nil
+	}
+
+	return val.Interface(), nil
 }
 
 // Bytes from JS come as hex strings (e.g. "0xabcd").

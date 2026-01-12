@@ -10,7 +10,11 @@ import {
 	maybeDeployMulticall3,
 } from "../helpers/init.ts";
 import { monitoringLoop } from "../helpers/monitoring.ts";
-import { CONFIG, getScenarios } from "../helpers/scenarios.ts";
+import {
+	CONFIG,
+	getMaxIterationsPerVu,
+	getScenarios,
+} from "../helpers/scenarios.ts";
 
 // ======================= CONTRACT ARTIFACTS =======================
 const CONTRACT_ABI = String(
@@ -126,8 +130,7 @@ function createCallData(
 	batchIndex: number = 0,
 ): Uint8Array {
 	// Unique handle per tx: combine VU id, iteration, batch index
-	const durationSeconds = CONFIG.duration;
-	const maxIterations = BigInt(CONFIG.rate * durationSeconds);
+	const maxIterations = BigInt(getMaxIterationsPerVu());
 	const batchSize = BigInt(CONFIG.batchSize);
 
 	const handleOffset =
