@@ -86,18 +86,30 @@ refund:
 monitoring: build
 	@set -a && . ./.env && set +a && $(K6_OUTPUT) run --out json=tmp.json --out xk6-influxdb scripts/monitoring.ts
 
+.PHONY: run-historical-monitoring
+run-historical-monitoring: build
+	@if [ -z "$(START_BLOCK)" ]; then \
+		echo "Error: START_BLOCK is required"; \
+		echo "Usage: START_BLOCK=1000 END_BLOCK=2000 NUM_VUS=4 make run-historical-monitoring"; \
+		exit 1; \
+	fi
+	@set -a && . ./.env && set +a && \
+	START_BLOCK=$(START_BLOCK) END_BLOCK=$(END_BLOCK) BATCH_SIZE=$(BATCH_SIZE) LOG_INTERVAL=$(LOG_INTERVAL) NUM_VUS=$(NUM_VUS) \
+	$(K6_OUTPUT) run --out json=tmp.json --out xk6-influxdb scripts/historical-monitoring.ts
+
 .PHONY: help
 help:
 	@echo "Available targets:"
-	@echo "  build                    - Build custom k6 binary"
-	@echo "  clean                    - Clean build artifacts"
-	@echo "  run-user-decrypt         - Run user decrypt benchmark"
-	@echo "  run-public-decrypt       - Run public decrypt benchmark"
-	@echo "  run-allow-public-decrypt - Run allowPublicDecrypt benchmark"
-	@echo "  run-eth-transfer         - Run ETH transfer benchmark"
-	@echo "  run-erc20                - Run ERC20 transfer benchmark (deploys ERC20 in setup, sync tx)"
-	@echo "  run-arbitrary-execution  - Run arbitrary execution benchmark (N_SSTORE, N_EVENTS, or CALLDATA_SIZE)"
-	@echo "  refund                   - Refund ETH from test accounts (fast, uses bun+viem)"
-	@echo "  test-unit                - Run Go unit tests (no node required)"
-	@echo "  test-integration         - Run Go integration tests (requires Anvil at 127.0.0.1:8545)"
-	@echo "  help                     - Show this help"
+	@echo "  build                      - Build custom k6 binary"
+	@echo "  clean                      - Clean build artifacts"
+	@echo "  run-user-decrypt           - Run user decrypt benchmark"
+	@echo "  run-public-decrypt         - Run public decrypt benchmark"
+	@echo "  run-allow-public-decrypt   - Run allowPublicDecrypt benchmark"
+	@echo "  run-eth-transfer           - Run ETH transfer benchmark"
+	@echo "  run-erc20                  - Run ERC20 transfer benchmark (deploys ERC20 in setup, sync tx)"
+	@echo "  run-arbitrary-execution    - Run arbitrary execution benchmark (N_SSTORE, N_EVENTS, or CALLDATA_SIZE)"
+	@echo "  run-historical-monitoring  - Run historical block monitoring (START_BLOCK required, NUM_VUS=4 default)"
+	@echo "  refund                     - Refund ETH from test accounts (fast, uses bun+viem)"
+	@echo "  test-unit                  - Run Go unit tests (no node required)"
+	@echo "  test-integration           - Run Go integration tests (requires Anvil at 127.0.0.1:8545)"
+	@echo "  help                       - Show this help"

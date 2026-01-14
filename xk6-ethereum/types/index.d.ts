@@ -159,6 +159,12 @@ declare module "k6/x/ethereum" {
 		newContract(address: string, abi: string): Contract;
 		deployContract(abi: string, bytecode: string, ...args: any[]): Receipt;
 		newBlockMonitor(batchSize: number): BlockMonitor;
+		// Creates an iterator for processing historical blocks in a range.
+		newHistoricalBlockIterator(
+			batchSize: number,
+			startBlock: number,
+			endBlock: number,
+		): HistoricalBlockIterator;
 		// Raw JSON-RPC call
 		call(method: string, ...params: any[]): any;
 		print(msg: string): void;
@@ -166,6 +172,16 @@ declare module "k6/x/ethereum" {
 
 	export interface BlockMonitor {
 		processBlockEvent(): void;
+	}
+
+	// Iterator for processing historical blocks and emitting metrics.
+	export interface HistoricalBlockIterator {
+		// Fetches the next block and emits metrics. Returns true if more blocks remain.
+		processNextBlock(): boolean;
+		// Returns the current block number being processed.
+		getCurrentBlock(): number;
+		// Returns whether all blocks have been processed.
+		isDone(): boolean;
 	}
 
 	export interface WalletInfo {

@@ -1464,6 +1464,17 @@ type BlockMonitor struct {
 	emitMetrics   func(block *types.Block, userTxCount int, blockTimeMs float64, blockTimestamp time.Time)
 }
 
+// HistoricalBlockIterator processes historical blocks and emits metrics.
+type HistoricalBlockIterator struct {
+	client        *Client
+	batchSize     int
+	startBlock    uint64
+	endBlock      uint64
+	currentBlock  uint64
+	lastBlockTime time.Time
+	done          bool
+}
+
 // GetWallet returns wallet information (address and private key).
 func (c *Client) GetWallet() (*WalletInfo, error) {
 	if c.privateKey == nil {
@@ -1675,22 +1686,27 @@ func (bm *BlockMonitor) handleBlockHeader(header *types.Header) {
 }
 
 func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, blockTimeMs float64, blockTimestamp time.Time) {
-	if bm.client.vu == nil {
+	bm.client.emitBlockMetrics(block, userTxCount, blockTimeMs, blockTimestamp, bm.batchSize)
+}
+
+// emitBlockMetrics emits block metrics to k6. This is shared between BlockMonitor and HistoricalBlockIterator.
+func (c *Client) emitBlockMetrics(block *types.Block, userTxCount int, blockTimeMs float64, blockTimestamp time.Time, batchSize int) {
+	if c.vu == nil {
 		return
 	}
 
-	rootTS := bm.client.runtimeTagSet()
+	rootTS := c.runtimeTagSet()
 	if rootTS == nil {
 		return
 	}
 
-	userOps := float64(userTxCount * bm.batchSize)
+	userOps := float64(userTxCount * batchSize)
 
 	// Emit all block metrics as connected samples.
 	samples := []metrics.Sample{
 		{
 			TimeSeries: metrics.TimeSeries{
-				Metric: bm.client.metrics.BlockCount,
+				Metric: c.metrics.BlockCount,
 				Tags:   rootTS,
 			},
 			Value: float64(1),
@@ -1698,7 +1714,7 @@ func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, bl
 		},
 		{
 			TimeSeries: metrics.TimeSeries{
-				Metric: bm.client.metrics.BlockNumber,
+				Metric: c.metrics.BlockNumber,
 				Tags:   rootTS,
 			},
 			Value: float64(block.NumberU64()),
@@ -1706,7 +1722,7 @@ func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, bl
 		},
 		{
 			TimeSeries: metrics.TimeSeries{
-				Metric: bm.client.metrics.BlockTransactions,
+				Metric: c.metrics.BlockTransactions,
 				Tags:   rootTS,
 			},
 			Value: float64(userTxCount),
@@ -1714,7 +1730,7 @@ func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, bl
 		},
 		{
 			TimeSeries: metrics.TimeSeries{
-				Metric: bm.client.metrics.GasUsed,
+				Metric: c.metrics.GasUsed,
 				Tags:   rootTS,
 			},
 			Value: float64(block.GasUsed()),
@@ -1722,7 +1738,7 @@ func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, bl
 		},
 		{
 			TimeSeries: metrics.TimeSeries{
-				Metric: bm.client.metrics.BlockUserOps,
+				Metric: c.metrics.BlockUserOps,
 				Tags:   rootTS,
 			},
 			Value: userOps,
@@ -1730,7 +1746,7 @@ func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, bl
 		},
 		{
 			TimeSeries: metrics.TimeSeries{
-				Metric: bm.client.metrics.BlockTime,
+				Metric: c.metrics.BlockTime,
 				Tags:   rootTS,
 			},
 			Value: blockTimeMs,
@@ -1744,7 +1760,7 @@ func (bm *BlockMonitor) emitBlockMetrics(block *types.Block, userTxCount int, bl
 		Time:    blockTimestamp,
 	}
 
-	metrics.PushIfNotDone(bm.client.vu.Context(), bm.client.vu.State().Samples, connectedSamples)
+	metrics.PushIfNotDone(c.vu.Context(), c.vu.State().Samples, connectedSamples)
 }
 
 func (bm *BlockMonitor) cleanup() {
@@ -1768,4 +1784,103 @@ func (bm *BlockMonitor) getContextDone() <-chan struct{} {
 
 	// Return the sentinel channel that never closes if vu is nil (testing mode).
 	return neverClosedChan
+}
+
+// NewHistoricalBlockIterator creates a new iterator for processing historical blocks.
+func (c *Client) NewHistoricalBlockIterator(batchSize int, startBlock, endBlock uint64) *HistoricalBlockIterator {
+	effectiveBatchSize := batchSize
+	if effectiveBatchSize == 0 {
+		effectiveBatchSize = 1
+	}
+
+	return &HistoricalBlockIterator{
+		client:       c,
+		batchSize:    effectiveBatchSize,
+		startBlock:   startBlock,
+		endBlock:     endBlock,
+		currentBlock: startBlock,
+		done:         false,
+	}
+}
+
+// ProcessNextBlock fetches the next historical block and emits metrics.
+// Returns true if there are more blocks to process, false when done.
+func (hbi *HistoricalBlockIterator) ProcessNextBlock() bool {
+	if hbi.done || hbi.currentBlock > hbi.endBlock {
+		hbi.done = true
+
+		return false
+	}
+
+	const millisecondsPerSecond = 1000.0
+
+	ctx := hbi.client.getBaseContext()
+	startTime := time.Now()
+
+	block, err := hbi.client.client.BlockByNumber(ctx, big.NewInt(int64(hbi.currentBlock))) //nolint:gosec // Block numbers are always positive
+	hbi.client.reportCallMetrics("eth_getBlockByNumber", time.Since(startTime))
+
+	if err != nil {
+		if logger := hbi.client.getLogger(); logger != nil {
+			logger.WithError(err).Warnf("Error getting block %d", hbi.currentBlock)
+		}
+
+		hbi.currentBlock++
+
+		return hbi.currentBlock <= hbi.endBlock
+	}
+
+	if block == nil {
+		hbi.currentBlock++
+
+		return hbi.currentBlock <= hbi.endBlock
+	}
+
+	// Use block number as nanoseconds to ensure unique timestamps when multiple blocks share
+	// the same second-level timestamp. Block timestamps are only second-granular, but InfluxDB
+	// uses timestamp+tags as unique identifiers, causing data point overwrites without this.
+	headerTimestamp := time.Unix(int64(block.Time()), int64(block.NumberU64()%1_000_000_000)) //nolint:gosec // don't care about overflow
+
+	if hbi.lastBlockTime.IsZero() {
+		// First block: prime lastBlockTime, don't emit metrics yet.
+		hbi.lastBlockTime = headerTimestamp
+		hbi.currentBlock++
+
+		return hbi.currentBlock <= hbi.endBlock
+	}
+
+	timeDelta := headerTimestamp.Sub(hbi.lastBlockTime)
+	hbi.lastBlockTime = headerTimestamp
+
+	// Count only user transactions (standard EVM types 0x00-0x04).
+	// Excludes Arbitrum system transactions (types 0x64+) from UOPS calculation.
+	txs := block.Transactions()
+	userTxCount := 0
+
+	for _, tx := range txs {
+		if tx.Type() <= types.SetCodeTxType {
+			userTxCount++
+		}
+	}
+
+	blockTimeMs := timeDelta.Seconds() * millisecondsPerSecond
+	hbi.emitBlockMetrics(block, userTxCount, blockTimeMs, headerTimestamp)
+
+	hbi.currentBlock++
+
+	return hbi.currentBlock <= hbi.endBlock
+}
+
+func (hbi *HistoricalBlockIterator) emitBlockMetrics(block *types.Block, userTxCount int, blockTimeMs float64, blockTimestamp time.Time) {
+	hbi.client.emitBlockMetrics(block, userTxCount, blockTimeMs, blockTimestamp, hbi.batchSize)
+}
+
+// GetCurrentBlock returns the current block number being processed.
+func (hbi *HistoricalBlockIterator) GetCurrentBlock() uint64 {
+	return hbi.currentBlock
+}
+
+// IsDone returns whether all blocks have been processed.
+func (hbi *HistoricalBlockIterator) IsDone() bool {
+	return hbi.done
 }
