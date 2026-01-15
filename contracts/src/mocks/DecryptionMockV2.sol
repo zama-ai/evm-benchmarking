@@ -18,31 +18,7 @@ import {SnsCiphertextMaterial, CtHandleContractPair} from "@gateway-contracts/sh
  */
 contract DecryptionMockV2 {
     // ======================= STRUCTS =======================
-
-    /**
-     * @notice The typed data structure for the EIP712 signature to validate in user decryption requests.
-     * @dev Mirrors the structure from real Decryption.sol
-     */
-    struct UserDecryptRequestVerification {
-        bytes publicKey;
-        address[] contractAddresses;
-        uint256 startTimestamp;
-        uint256 durationDays;
-        bytes extraData;
-    }
-
-    /**
-     * @notice The typed data structure for the EIP712 signature to validate in delegated user decryption requests.
-     * @dev Mirrors the structure from real Decryption.sol
-     */
-    struct DelegatedUserDecryptRequestVerification {
-        bytes publicKey;
-        address[] contractAddresses;
-        address delegatorAddress;
-        uint256 startTimestamp;
-        uint256 durationDays;
-        bytes extraData;
-    }
+    // Note: EIP712 verification structs removed - using off-chain commitment verification instead
 
     // ======================= CONSTANTS =======================
 
@@ -72,6 +48,10 @@ contract DecryptionMockV2 {
     mapping(uint256 decryptionId => mapping(bytes32 digest => address[] kmsTxSenderAddresses))
         internal consensusTxSenderAddresses;
 
+    /// @notice Data commitment for user decryption requests (hash of off-chain data)
+    /// @dev KMS connectors verify hash(publicKey, signature, extraData) == dataCommitment
+    mapping(uint256 decryptionId => bytes32 dataCommitment) public userDecryptionDataCommitments;
+
     // ======================= ERRORS =======================
 
     error EmptyCtHandles();
@@ -92,6 +72,36 @@ contract DecryptionMockV2 {
         SnsCiphertextMaterial invalidSnsCtMaterial
     );
     error DecryptionNotRequested(uint256 decryptionId);
+
+    // ======================= EVENTS =======================
+
+    /**
+     * @notice Emitted when a user decryption request is made with data commitment
+     * @param decryptionId The decryption request ID
+     * @param snsCtMaterials The SNS ciphertext materials
+     * @param userAddress The user's address
+     * @param dataCommitment Hash commitment of off-chain data (publicKey, signature, extraData)
+     */
+    event UserDecryptionRequestWithCommitment(
+        uint256 indexed decryptionId,
+        SnsCiphertextMaterial[] snsCtMaterials,
+        address userAddress,
+        bytes32 dataCommitment
+    );
+
+    /**
+     * @notice Emitted when a delegated user decryption request is made with data commitment
+     * @param decryptionId The decryption request ID
+     * @param snsCtMaterials The SNS ciphertext materials
+     * @param delegateAddress The delegate's address
+     * @param dataCommitment Hash commitment of off-chain data (publicKey, signature, extraData)
+     */
+    event DelegatedUserDecryptionRequestWithCommitment(
+        uint256 indexed decryptionId,
+        SnsCiphertextMaterial[] snsCtMaterials,
+        address delegateAddress,
+        bytes32 dataCommitment
+    );
 
     // ======================= CONSTRUCTOR =======================
 
@@ -178,31 +188,7 @@ contract DecryptionMockV2 {
         return materials;
     }
 
-    /**
-     * @notice Mock signature validation for user decryption request
-     * @dev Simulates _validateUserDecryptRequestEIP712Signature() internal call
-     */
-    function _validateUserDecryptRequestEIP712Signature(
-        UserDecryptRequestVerification memory /* userDecryptRequestVerification */,
-        address /* userAddress */,
-        bytes calldata /* signature */,
-        uint256 /* contractsChainId */
-    ) internal view virtual {
-        BenchmarkGasUtils.simulateExternalCall();
-    }
-
-    /**
-     * @notice Mock signature validation for delegated user decryption request
-     * @dev Simulates _validateDelegatedUserDecryptRequestEIP712Signature() internal call
-     */
-    function _validateDelegatedUserDecryptRequestEIP712Signature(
-        DelegatedUserDecryptRequestVerification memory /* delegatedUserDecryptRequestVerification */,
-        address /* delegateAddress */,
-        bytes calldata /* signature */,
-        uint256 /* contractsChainId */
-    ) internal view virtual {
-        BenchmarkGasUtils.simulateExternalCall();
-    }
+    // Note: EIP712 signature validation functions removed - using off-chain commitment verification instead
 
     // ======================= PUBLIC DECRYPTION REQUEST =======================
 
@@ -245,16 +231,16 @@ contract DecryptionMockV2 {
     // ======================= USER DECRYPTION REQUEST =======================
 
     /**
-     * @notice See {IDecryption-userDecryptionRequest}.
+     * @notice User decryption request with data commitment (optimized for lower payload size)
+     * @dev Instead of on-chain signature validation, stores a commitment hash.
+     *      KMS connectors receive the full data off-chain and verify hash(publicKey, signature, extraData) == dataCommitment.
      */
     function userDecryptionRequest(
         CtHandleContractPair[] calldata ctHandleContractPairs,
         IDecryption.RequestValidity calldata requestValidity,
         IDecryption.ContractsInfo calldata contractsInfo,
         address userAddress,
-        bytes calldata publicKey,
-        bytes calldata signature,
-        bytes calldata extraData
+        bytes32 dataCommitment
     ) external virtual {
         _checkIsRegisteredHostChain(contractsInfo.chainId);
 
@@ -283,25 +269,7 @@ contract DecryptionMockV2 {
             userAddress
         );
 
-        // Using scoped local variable to avoid "stack too deep" errors.
-        {
-            // Initialize the UserDecryptRequestVerification structure for the signature validation.
-            UserDecryptRequestVerification memory userDecryptRequestVerification = UserDecryptRequestVerification(
-                publicKey,
-                contractsInfo.addresses,
-                requestValidity.startTimestamp,
-                requestValidity.durationDays,
-                extraData
-            );
-
-            // Validate the received EIP712 signature on the user decryption request.
-            _validateUserDecryptRequestEIP712Signature(
-                userDecryptRequestVerification,
-                userAddress,
-                signature,
-                contractsInfo.chainId
-            );
-        }
+        // Note: EIP712 signature validation removed - verification happens off-chain by KMS connectors
 
         // Fetch the ciphertexts from the CiphertextCommits contract
         SnsCiphertextMaterial[] memory snsCtMaterials = _getSnsCiphertextMaterials(ctHandles);
@@ -316,25 +284,29 @@ contract DecryptionMockV2 {
         userDecryptionCounter++;
         uint256 userDecryptionId = userDecryptionCounter;
 
+        // Store the data commitment for KMS connectors to verify off-chain
+        userDecryptionDataCommitments[userDecryptionId] = dataCommitment;
+
         // Collect the fee from the transaction sender for this user decryption request.
         _collectUserDecryptionFee(msg.sender);
 
-        emit IDecryption.UserDecryptionRequest(userDecryptionId, snsCtMaterials, userAddress, publicKey, extraData);
+        // Emit event with dataCommitment instead of full data (publicKey, signature, extraData)
+        emit UserDecryptionRequestWithCommitment(userDecryptionId, snsCtMaterials, userAddress, dataCommitment);
     }
 
     // ======================= DELEGATED USER DECRYPTION REQUEST =======================
 
     /**
-     * @notice See {IDecryption-delegatedUserDecryptionRequest}.
+     * @notice Delegated user decryption request with data commitment (optimized for lower payload size)
+     * @dev Instead of on-chain signature validation, stores a commitment hash.
+     *      KMS connectors receive the full data off-chain and verify hash(publicKey, signature, extraData) == dataCommitment.
      */
     function delegatedUserDecryptionRequest(
         CtHandleContractPair[] calldata ctHandleContractPairs,
         IDecryption.RequestValidity calldata requestValidity,
         IDecryption.DelegationAccounts calldata delegationAccounts,
         IDecryption.ContractsInfo calldata contractsInfo,
-        bytes calldata publicKey,
-        bytes calldata signature,
-        bytes calldata extraData
+        bytes32 dataCommitment
     ) external virtual {
         _checkIsRegisteredHostChain(contractsInfo.chainId);
 
@@ -371,28 +343,7 @@ contract DecryptionMockV2 {
             contractsInfo.addresses
         );
 
-        // Using scoped local variable to avoid "stack too deep" errors. This will be revisited during the EIP-712 struct refactor.
-        // See: https://github.com/zama-ai/fhevm-internal/issues/403
-        {
-            // Initialize the DelegatedUserDecryptRequestVerification structure for the signature validation.
-            DelegatedUserDecryptRequestVerification
-                memory delegatedUserDecryptRequestVerification = DelegatedUserDecryptRequestVerification(
-                    publicKey,
-                    contractsInfo.addresses,
-                    delegationAccounts.delegatorAddress,
-                    requestValidity.startTimestamp,
-                    requestValidity.durationDays,
-                    extraData
-                );
-
-            // Validate the received EIP712 signature on the delegated user decryption request.
-            _validateDelegatedUserDecryptRequestEIP712Signature(
-                delegatedUserDecryptRequestVerification,
-                delegationAccounts.delegateAddress,
-                signature,
-                contractsInfo.chainId
-            );
-        }
+        // Note: EIP712 signature validation removed - verification happens off-chain by KMS connectors
 
         // Fetch the ciphertexts from the CiphertextCommits contract.
         SnsCiphertextMaterial[] memory snsCtMaterials = _getSnsCiphertextMaterials(ctHandles);
@@ -407,16 +358,18 @@ contract DecryptionMockV2 {
         userDecryptionCounter++;
         uint256 userDecryptionId = userDecryptionCounter;
 
+        // Store the data commitment for KMS connectors to verify off-chain
+        userDecryptionDataCommitments[userDecryptionId] = dataCommitment;
 
         // Collect the fee from the transaction sender for this delegated user decryption request.
         _collectUserDecryptionFee(msg.sender);
 
-        emit IDecryption.UserDecryptionRequest(
+        // Emit event with dataCommitment instead of full data (publicKey, signature, extraData)
+        emit DelegatedUserDecryptionRequestWithCommitment(
             userDecryptionId,
             snsCtMaterials,
             delegationAccounts.delegateAddress,
-            publicKey,
-            extraData
+            dataCommitment
         );
     }
 

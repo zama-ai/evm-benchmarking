@@ -17,17 +17,14 @@ const CONTRACT_BIN = String(
 // Number of ciphertext handles per request (mirrored from real tx)
 const NUM_CT_HANDLES = 1;
 
-// Size of user's public key in bytes (real tx has ~800 bytes)
-const PUBLIC_KEY_SIZE_BYTES = 800;
-
-// Size of EIP712 signature (65 bytes: r=32, s=32, v=1)
-const SIGNATURE_SIZE_BYTES = 65;
-
 // Chain ID for contractsInfo (Sepolia testnet as example)
 const CHAIN_ID = 11155111;
 
 // Request validity duration in days
 const DURATION_DAYS = 7;
+
+// Note: publicKey (~800 bytes), signature (65 bytes), and extraData are now sent off-chain to KMS connectors
+// Only the dataCommitment (32 bytes hash of this data) is stored on-chain, reducing payload from ~1.5KB to ~32 bytes
 
 // ======================= TEST OPTIONS =======================
 
@@ -47,11 +44,13 @@ interface SetupData {
 // ======================= SETUP =======================
 
 export function setup(): SetupData {
-	console.log("User Decryption Request Benchmark (Request-Only)");
+	console.log("User Decryption Request Benchmark (Data Commitment Strategy)");
 	console.log(`CT handles per request: ${NUM_CT_HANDLES}`);
-	console.log(`Public key size: ${PUBLIC_KEY_SIZE_BYTES} bytes`);
-	console.log(`Signature size: ${SIGNATURE_SIZE_BYTES} bytes`);
+	console.log(`Data commitment size: 32 bytes (replaces ~1.5KB payload)`);
 	console.log(`Chain ID: ${CHAIN_ID}`);
+	console.log(
+		"Note: publicKey, signature, extraData sent off-chain to KMS connectors",
+	);
 
 	// Deploy contract - deployer becomes the aggregator
 	console.log("Deploying DecryptionMockV2 contract...");
@@ -112,17 +111,14 @@ function generateContractsInfo(contractAddress: string): [number, string[]] {
 }
 
 /**
- * Generate mock user public key (realistic size from real transactions)
+ * Generate mock data commitment (hash of off-chain data)
+ * In production, this would be: keccak256(abi.encode(publicKey, signature, extraData))
+ * For benchmarking, we use a deterministic mock hash
  */
-function generatePublicKey(): string {
-	return `0x${"aa".repeat(PUBLIC_KEY_SIZE_BYTES)}`;
-}
-
-/**
- * Generate mock EIP712 signature (65 bytes: r + s + v)
- */
-function generateSignature(): string {
-	return `0x${"bb".repeat(SIGNATURE_SIZE_BYTES)}`;
+function generateDataCommitment(iterationIndex: number): string {
+	// Generate unique commitment per iteration for realistic testing
+	const commitmentBase = BigInt(0xdeadbeef + iterationIndex);
+	return `0x${commitmentBase.toString(16).padStart(64, "0")}`;
 }
 
 // ======================= MAIN TEST FUNCTION =======================
@@ -134,21 +130,22 @@ export default function ({
 }: SetupData): void {
 	const contract = vuClient.newContract(contractAddress, CONTRACT_ABI);
 
-	// Send request transaction with full signature matching real Decryption.sol
+	// Send request transaction with data commitment (new optimized signature)
 	// userDecryptionRequest(
 	//   CtHandleContractPair[] ctHandleContractPairs,
 	//   RequestValidity requestValidity,
 	//   ContractsInfo contractsInfo,
 	//   address userAddress,
-	//   bytes publicKey,
-	//   bytes signature,
-	//   bytes extraData
+	//   bytes32 dataCommitment  // <-- replaces publicKey, signature, extraData (saves ~1.5KB)
 	// )
 	const ctHandleContractPairs = generateCtHandleContractPairs(contractAddress);
 	const requestValidity = generateRequestValidity();
 	const contractsInfo = generateContractsInfo(contractAddress);
-	const publicKey = generatePublicKey();
-	const signature = generateSignature();
+
+	// Use __ITER to get unique commitment per iteration (k6 built-in variable)
+	// @ts-expect-error - __ITER is injected by k6 runtime
+	const iterationIndex = typeof __ITER !== "undefined" ? __ITER : 0;
+	const dataCommitment = generateDataCommitment(iterationIndex);
 
 	const requestCallData = contract.encodeABI(
 		"userDecryptionRequest",
@@ -156,9 +153,7 @@ export default function ({
 		requestValidity,
 		contractsInfo,
 		userAddress,
-		publicKey,
-		signature,
-		"0x00", // extraData
+		dataCommitment,
 	);
 
 	const requestReceipt = vuClient.sendTransactionSync({
@@ -183,10 +178,11 @@ export function handleSummary(
 	data: Record<string, unknown>,
 ): Record<string, string> {
 	console.log("=== USER DECRYPTION REQUEST BENCHMARK SUMMARY ===");
+	console.log("Data Commitment Strategy (Optimized Payload)");
 	console.log("Each iteration = 1 request tx");
 	console.log(`CT handles per request: ${NUM_CT_HANDLES}`);
-	console.log(`Public key size: ${PUBLIC_KEY_SIZE_BYTES} bytes`);
-	console.log(`Signature size: ${SIGNATURE_SIZE_BYTES} bytes`);
+	console.log(`Data commitment size: 32 bytes`);
+	console.log(`Payload reduction: ~1.5KB → 32 bytes (~98% reduction)`);
 	console.log(`Chain ID: ${CHAIN_ID}`);
 
 	return {
