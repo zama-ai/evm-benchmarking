@@ -44,16 +44,6 @@ contract DecryptionMockV2 {
         bytes extraData;
     }
 
-    /**
-     * @notice The publicKey and ctHandles from user decryption requests used for validations during responses.
-     * @dev Mirrors the structure from real Decryption.sol
-     * TODO REMOVE FOR V2: Not used in mock since we don't implement response flows
-     */
-    struct UserDecryptionPayload {
-        bytes publicKey;
-        bytes32[] ctHandles;
-    }
-
     // ======================= CONSTANTS =======================
 
     uint16 internal constant MAX_USER_DECRYPT_DURATION_DAYS = 365;
@@ -76,15 +66,11 @@ contract DecryptionMockV2 {
 
     /// @notice The digest of the signed struct on which consensus was reached for a decryption request.
     mapping(uint256 decryptionId => bytes32 consensusDigest) public decryptionConsensusDigest;
-    
+
 
     /// @notice The KMS transaction senders involved in consensus (for mock, stored as empty array)
     mapping(uint256 decryptionId => mapping(bytes32 digest => address[] kmsTxSenderAddresses))
         internal consensusTxSenderAddresses;
-
-    // TODO REMOVE FOR V2: Not used in mock since we don't implement response flows
-    /// @notice The decryption payloads stored during user decryption requests.
-    mapping(uint256 decryptionId => UserDecryptionPayload payload) internal userDecryptionPayloads;
 
     // ======================= ERRORS =======================
 
@@ -330,9 +316,6 @@ contract DecryptionMockV2 {
         userDecryptionCounter++;
         uint256 userDecryptionId = userDecryptionCounter;
 
-        // TODO REMOVE FOR V2: The publicKey and ctHandles are used during response calls for the EIP712 signature validation.
-        userDecryptionPayloads[userDecryptionId] = UserDecryptionPayload(publicKey, ctHandles);
-
         // Collect the fee from the transaction sender for this user decryption request.
         _collectUserDecryptionFee(msg.sender);
 
@@ -424,8 +407,6 @@ contract DecryptionMockV2 {
         userDecryptionCounter++;
         uint256 userDecryptionId = userDecryptionCounter;
 
-        // TODO REMOVE FOR V2: The publicKey and ctHandles are used during response calls for the EIP712 signature validation.
-        userDecryptionPayloads[userDecryptionId] = UserDecryptionPayload(publicKey, ctHandles);
 
         // Collect the fee from the transaction sender for this delegated user decryption request.
         _collectUserDecryptionFee(msg.sender);
@@ -644,11 +625,4 @@ contract DecryptionMockV2 {
         return publicCtHandles[decryptionId];
     }
 
-    /**
-     * @notice Get the stored user decryption payload for a request
-     * @dev TODO REMOVE FOR V2: Only needed for response validation (not implemented in mock)
-     */
-    function getUserDecryptionPayload(uint256 decryptionId) external view returns (UserDecryptionPayload memory) {
-        return userDecryptionPayloads[decryptionId];
-    }
 }

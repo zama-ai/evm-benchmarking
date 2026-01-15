@@ -168,7 +168,6 @@ export default function ({
 		gas: 5_000_000,
 		value: 0,
 	});
-	console.log(`Request transaction with hash ${requestReceipt.transactionHash} has status: ${requestReceipt.status}`);
 	if (requestReceipt.status !== 1) {
 		fail(`Request transaction failed with status: ${requestReceipt.status}`);
 	}
