@@ -40,6 +40,7 @@ var (
 	errInvalidAddress       = errors.New("invalid address")
 	errValueOverflow        = errors.New("value out of int64 range")
 	errNegativeValue        = errors.New("value must be non-negative")
+	errWSClientNotInit      = errors.New("ws client not initialized")
 )
 
 // neverClosedChan is a sentinel channel that never closes, used when VU context is nil.
@@ -1454,14 +1455,22 @@ func (c *Client) makeHandledPromise() (*sobek.Promise, func(any), func(any)) {
 
 // BlockMonitor handles block event processing and metrics.
 type BlockMonitor struct {
-	client        *Client
-	batchSize     int
-	events        chan *types.Header
-	unsubscribe   func() error
-	lastBlockTime time.Time
-	wsClient      *ethclient.Client
-	fetchBlock    func(context.Context, common.Hash) (*types.Block, error)
-	emitMetrics   func(block *types.Block, userTxCount int, blockTimeMs float64, blockTimestamp time.Time)
+	client            *Client
+	batchSize         int
+	events            chan *types.Header
+	unsubscribe       func() error
+	sub               ethereum.Subscription
+	lastBlockTime     time.Time
+	wsClient          *ethclient.Client
+	wsURL             string
+	lastHeaderTime    time.Time
+	lastHeaderNumber  uint64
+	lastLivenessCheck time.Time
+	inactivityTimeout time.Duration
+	blockNumberFn     func(context.Context) (uint64, error)
+	reconnectFn       func()
+	fetchBlock        func(context.Context, common.Hash) (*types.Block, error)
+	emitMetrics       func(block *types.Block, userTxCount int, blockTimeMs float64, blockTimestamp time.Time)
 }
 
 // HistoricalBlockIterator processes historical blocks and emits metrics.
@@ -1565,26 +1574,7 @@ func (c *Client) newBlockMonitor(batchSize int) (*BlockMonitor, error) {
 
 	events := make(chan *types.Header)
 
-	var sub ethereum.Subscription
-
-	// Retry subscription with backoff.
-	const maxRetries = 10
-
-	for attempt := range maxRetries {
-		sub, err = wsClient.SubscribeNewHead(c.getBaseContext(), events)
-		if err == nil {
-			break
-		}
-
-		if attempt < maxRetries-1 {
-			waitTime := time.Duration(attempt+1) * 2 * time.Second //nolint:gosec,mnd // Safe conversion and retry backoff.
-			if logger := c.getLogger(); logger != nil {
-				logger.WithError(err).Warnf("Failed to subscribe to newHeads (attempt %d/%d). Retrying in %v...", attempt+1, maxRetries, waitTime)
-			}
-			time.Sleep(waitTime)
-		}
-	}
-
+	sub, err := subscribeNewHeads(c.getBaseContext(), wsClient, events, c.getLogger())
 	if err != nil {
 		wsClient.Close()
 
@@ -1598,12 +1588,18 @@ func (c *Client) newBlockMonitor(batchSize int) (*BlockMonitor, error) {
 	}
 
 	return &BlockMonitor{
-		client:      c,
-		batchSize:   effectiveBatchSize,
-		events:      events,
-		unsubscribe: unsubscribe,
-		wsClient:    wsClient,
-		fetchBlock:  wsClient.BlockByHash,
+		client:            c,
+		batchSize:         effectiveBatchSize,
+		events:            events,
+		unsubscribe:       unsubscribe,
+		sub:               sub,
+		wsClient:          wsClient,
+		wsURL:             wsURL,
+		lastHeaderTime:    time.Now(),
+		lastLivenessCheck: time.Now(),
+		inactivityTimeout: 10 * time.Second,
+		blockNumberFn:     wsClient.BlockNumber,
+		fetchBlock:        wsClient.BlockByHash,
 	}, nil
 }
 
@@ -1614,13 +1610,27 @@ func (bm *BlockMonitor) ProcessBlockEvent() {
 	case header := <-bm.events:
 		bm.handleBlockHeader(header)
 
+	case err := <-bm.subErrChan():
+		bm.handleSubError(err)
+
 	case <-bm.getContextDone():
 		bm.cleanup()
+
+		return
+
+	default:
 	}
+
+	bm.checkInactivity()
 }
 
 func (bm *BlockMonitor) handleBlockHeader(header *types.Header) {
 	const millisecondsPerSecond = 1000.0
+
+	bm.lastHeaderTime = time.Now()
+	if header != nil && header.Number != nil {
+		bm.lastHeaderNumber = header.Number.Uint64()
+	}
 
 	// Use block number as nanoseconds to ensure unique timestamps when multiple blocks share
 	// the same second-level timestamp. Block timestamps are only second-granular, but InfluxDB
@@ -1784,6 +1794,159 @@ func (bm *BlockMonitor) getContextDone() <-chan struct{} {
 
 	// Return the sentinel channel that never closes if vu is nil (testing mode).
 	return neverClosedChan
+}
+
+func (bm *BlockMonitor) subErrChan() <-chan error {
+	if bm.sub != nil {
+		return bm.sub.Err()
+	}
+
+	return nil
+}
+
+func (bm *BlockMonitor) handleSubError(err error) {
+	if logger := bm.client.getLogger(); logger != nil {
+		if err != nil {
+			logger.WithError(err).Warn("Block monitor subscription error; reconnecting")
+		} else {
+			logger.Warn("Block monitor subscription closed; reconnecting")
+		}
+	}
+
+	bm.reconnect()
+}
+
+func (bm *BlockMonitor) checkInactivity() {
+	if bm.inactivityTimeout <= 0 {
+		return
+	}
+
+	if bm.lastHeaderTime.IsZero() {
+		bm.lastHeaderTime = time.Now()
+
+		return
+	}
+
+	now := time.Now()
+	if now.Sub(bm.lastHeaderTime) < bm.inactivityTimeout {
+		return
+	}
+
+	if !bm.lastLivenessCheck.IsZero() && now.Sub(bm.lastLivenessCheck) < bm.inactivityTimeout {
+		return
+	}
+
+	bm.lastLivenessCheck = now
+
+	latest, err := bm.getLatestBlockNumber()
+	if err != nil {
+		if logger := bm.client.getLogger(); logger != nil {
+			logger.WithError(err).Warn("Block monitor liveness check failed; reconnecting")
+		}
+
+		bm.reconnect()
+
+		return
+	}
+
+	if latest > bm.lastHeaderNumber {
+		if logger := bm.client.getLogger(); logger != nil {
+			logger.Warnf("Block monitor inactive for %s while head advanced (last=%d latest=%d); reconnecting", bm.inactivityTimeout, bm.lastHeaderNumber, latest)
+		}
+
+		bm.reconnect()
+	}
+}
+
+func (bm *BlockMonitor) getLatestBlockNumber() (uint64, error) {
+	if bm.blockNumberFn != nil {
+		return bm.blockNumberFn(bm.client.getBaseContext())
+	}
+
+	if bm.wsClient == nil {
+		return 0, errWSClientNotInit
+	}
+
+	blockNumber, err := bm.wsClient.BlockNumber(bm.client.getBaseContext())
+	if err != nil {
+		return 0, fmt.Errorf("failed to get block number: %w", err)
+	}
+
+	return blockNumber, nil
+}
+
+func (bm *BlockMonitor) reconnect() {
+	if bm.reconnectFn != nil {
+		bm.reconnectFn()
+
+		return
+	}
+
+	if bm.wsURL == "" {
+		return
+	}
+
+	bm.cleanup()
+
+	wsClient, err := ethclient.Dial(bm.wsURL)
+	if err != nil {
+		if logger := bm.client.getLogger(); logger != nil {
+			logger.WithError(err).Warn("Block monitor reconnect failed: dial error")
+		}
+
+		return
+	}
+
+	sub, err := subscribeNewHeads(bm.client.getBaseContext(), wsClient, bm.events, bm.client.getLogger())
+	if err != nil {
+		wsClient.Close()
+
+		if logger := bm.client.getLogger(); logger != nil {
+			logger.WithError(err).Warn("Block monitor reconnect failed: subscribe error")
+		}
+
+		return
+	}
+
+	bm.wsClient = wsClient
+	bm.sub = sub
+	bm.unsubscribe = func() error {
+		sub.Unsubscribe()
+
+		return nil
+	}
+	bm.blockNumberFn = wsClient.BlockNumber
+	bm.lastHeaderTime = time.Now()
+	bm.lastLivenessCheck = bm.lastHeaderTime
+	bm.lastBlockTime = time.Time{}
+}
+
+func subscribeNewHeads(ctx context.Context, wsClient *ethclient.Client, events chan *types.Header, logger logrus.FieldLogger) (ethereum.Subscription, error) {
+	// Retry subscription with backoff.
+	const maxRetries = 10
+
+	var (
+		sub ethereum.Subscription
+		err error
+	)
+
+	for attempt := range maxRetries {
+		sub, err = wsClient.SubscribeNewHead(ctx, events)
+		if err == nil {
+			return sub, nil
+		}
+
+		if attempt < maxRetries-1 {
+			waitTime := time.Duration(attempt+1) * 2 * time.Second //nolint:gosec,mnd // Safe conversion and retry backoff.
+			if logger != nil {
+				logger.WithError(err).Warnf("Failed to subscribe to newHeads (attempt %d/%d). Retrying in %v...", attempt+1, maxRetries, waitTime)
+			}
+
+			time.Sleep(waitTime)
+		}
+	}
+
+	return nil, fmt.Errorf("failed to subscribe to newHeads after %d attempts: %w", maxRetries, err)
 }
 
 // NewHistoricalBlockIterator creates a new iterator for processing historical blocks.

@@ -2,6 +2,7 @@ package ethereum
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"testing"
 	"time"
@@ -11,6 +12,11 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/stretchr/testify/require"
+)
+
+var (
+	errTestBlockNumberFailure = errors.New("block number check failed")
+	errTestSubscriptionClosed = errors.New("subscription closed")
 )
 
 func TestBlockMonitorHandleBlockHeaderEmitsMetricsAfterFirstHeader(t *testing.T) {
@@ -89,4 +95,91 @@ func TestBlockMonitorHandleBlockHeaderEmitsMetricsAfterFirstHeader(t *testing.T)
 	require.InDelta(t, 1000.0, gotBlockMs, 0.01)
 	require.Equal(t, int64(1001), gotTime.Unix())
 	require.Equal(t, int64(2), int64(gotTime.Nanosecond()))
+}
+
+func TestBlockMonitorCheckInactivityReconnectsWhenHeadAdvanced(t *testing.T) {
+	now := time.Now()
+
+	var reconnects int
+
+	monitor := &BlockMonitor{
+		client:            &Client{},
+		inactivityTimeout: 10 * time.Second,
+		lastHeaderTime:    now.Add(-11 * time.Second),
+		lastLivenessCheck: now.Add(-11 * time.Second),
+		lastHeaderNumber:  100,
+		blockNumberFn: func(context.Context) (uint64, error) {
+			return 105, nil
+		},
+		reconnectFn: func() {
+			reconnects++
+		},
+	}
+
+	monitor.checkInactivity()
+
+	require.Equal(t, 1, reconnects)
+}
+
+func TestBlockMonitorCheckInactivityDoesNotReconnectWhenHeadStalled(t *testing.T) {
+	now := time.Now()
+
+	var reconnects int
+
+	monitor := &BlockMonitor{
+		client:            &Client{},
+		inactivityTimeout: 10 * time.Second,
+		lastHeaderTime:    now.Add(-11 * time.Second),
+		lastLivenessCheck: now.Add(-11 * time.Second),
+		lastHeaderNumber:  100,
+		blockNumberFn: func(context.Context) (uint64, error) {
+			return 100, nil
+		},
+		reconnectFn: func() {
+			reconnects++
+		},
+	}
+
+	monitor.checkInactivity()
+
+	require.Equal(t, 0, reconnects)
+}
+
+func TestBlockMonitorCheckInactivityReconnectsOnBlockNumberError(t *testing.T) {
+	now := time.Now()
+
+	var reconnects int
+
+	monitor := &BlockMonitor{
+		client:            &Client{},
+		inactivityTimeout: 10 * time.Second,
+		lastHeaderTime:    now.Add(-11 * time.Second),
+		lastLivenessCheck: now.Add(-11 * time.Second),
+		lastHeaderNumber:  100,
+		blockNumberFn: func(context.Context) (uint64, error) {
+			return 0, errTestBlockNumberFailure
+		},
+		reconnectFn: func() {
+			reconnects++
+		},
+	}
+
+	monitor.checkInactivity()
+
+	require.Equal(t, 1, reconnects)
+}
+
+func TestBlockMonitorHandleSubErrorReconnects(t *testing.T) {
+	var reconnects int
+
+	monitor := &BlockMonitor{
+		client: &Client{},
+		reconnectFn: func() {
+			reconnects++
+		},
+	}
+
+	monitor.handleSubError(errTestSubscriptionClosed)
+
+	require.Equal(t, 1, reconnects)
 }

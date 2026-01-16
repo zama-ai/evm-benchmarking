@@ -166,7 +166,9 @@ The monitor subscribes to new block headers and calculates TPS based on
 transaction counts per block.
 
 Note: `newBlockMonitor()` will throw if the WebSocket connection or subscription
-fails.
+fails. The block monitor also detects inactivity (10s without headers), checks
+`eth_blockNumber`, and reconnects if the chain head advanced without new
+subscription events.
 
 ## API Reference
 

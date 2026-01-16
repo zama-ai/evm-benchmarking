@@ -263,6 +263,8 @@ All benchmarks run a separate `monitor` scenario:
 - Uses `client.newBlockMonitor(BATCH_SIZE)` to subscribe and process block
   events
 - Calls `processBlockEvent()` to handle incoming block headers and emit metrics
+- If no headers arrive for 10s, the monitor checks `eth_blockNumber` and
+  reconnects if the head advanced
 - Emits block metrics as connected samples: `ethereum_block`,
   `ethereum_block_transactions`, `ethereum_gas_used`, `ethereum_uops`, and
   `ethereum_block_time`
