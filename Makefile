@@ -87,6 +87,11 @@ run-allow-public-decrypt: build build-contracts
 	@set -a && . ./.env && set +a && \
 	$(K6_OUTPUT) run --out json=tmp.json --out xk6-influxdb scripts/allow-public-decrypt.ts
 
+.PHONY: run-input-verification
+run-input-verification: build build-contracts
+	@set -a && . ./.env && set +a && \
+	$(K6_OUTPUT) run --out json=tmp.json --out xk6-influxdb scripts/input-verification.ts
+
 .PHONY: refund
 refund:
 	@set -a && . ./.env && set +a && bun run refund
@@ -115,6 +120,7 @@ help:
 	@echo "  run-user-decrypt-response    - Run user decrypt response-only benchmark (DecryptionMock)"
 	@echo "  run-public-decrypt-response  - Run public decrypt response-only benchmark (DecryptionMock)"
 	@echo "  run-allow-public-decrypt     - Run allowPublicDecrypt benchmark"
+	@echo "  run-input-verification       - Run input verification request benchmark"
 	@echo "  run-eth-transfer           - Run ETH transfer benchmark"
 	@echo "  run-erc20                  - Run ERC20 transfer benchmark (deploys ERC20 in setup, sync tx)"
 	@echo "  run-arbitrary-execution    - Run arbitrary execution benchmark (N_SSTORE, N_EVENTS, or CALLDATA_SIZE)"

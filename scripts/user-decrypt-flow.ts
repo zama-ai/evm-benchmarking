@@ -115,9 +115,9 @@ function generateContractsInfo(contractAddress: string): [number, string[]] {
  * In production, this would be: keccak256(abi.encode(publicKey, signature, extraData))
  * For benchmarking, we use a deterministic mock hash
  */
-function generateDataCommitment(iterationIndex: number): string {
+function generateDataCommitment(): string {
 	// Generate unique commitment per iteration for realistic testing
-	const commitmentBase = BigInt(0xdeadbeef + iterationIndex);
+	const commitmentBase = BigInt(0xdeadbeef);
 	return `0x${commitmentBase.toString(16).padStart(64, "0")}`;
 }
 
@@ -142,10 +142,7 @@ export default function ({
 	const requestValidity = generateRequestValidity();
 	const contractsInfo = generateContractsInfo(contractAddress);
 
-	// Use __ITER to get unique commitment per iteration (k6 built-in variable)
-	// @ts-expect-error - __ITER is injected by k6 runtime
-	const iterationIndex = typeof __ITER !== "undefined" ? __ITER : 0;
-	const dataCommitment = generateDataCommitment(iterationIndex);
+	const dataCommitment = generateDataCommitment();
 
 	const requestCallData = contract.encodeABI(
 		"userDecryptionRequest",
