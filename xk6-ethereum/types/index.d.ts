@@ -59,6 +59,21 @@ declare module "k6/x/ethereum" {
 		data: string; // hex bytes
 	}
 
+	export interface ParsedEvent {
+		name: string;
+		signature: string;
+		address: string;
+		blockNumber: number;
+		transactionHash: string;
+		transactionIndex: number;
+		blockHash: string;
+		logIndex: number;
+		removed: boolean;
+		topics: string[];
+		data: string; // hex bytes
+		args: Record<string, any>;
+	}
+
 	export interface TxnOpts {
 		// NOTE: numeric fields must fit JS safe integer range.
 		value?: number;
@@ -198,6 +213,9 @@ declare module "k6/x/ethereum" {
 		// Same retry logic as txnSync but uses standard RPC methods.
 		txnAndWaitReceipt(method: string, opts: TxnOpts, ...args: any[]): Receipt;
 		encodeABI(method: string, ...args: any[]): Uint8Array;
+		// Decode logs in a receipt using the contract ABI. Only logs emitted by this
+		// contract address are returned; others in the same receipt are ignored.
+		parseReceiptEvents(receipt: Receipt): ParsedEvent[];
 	}
 
 	const _default: {
