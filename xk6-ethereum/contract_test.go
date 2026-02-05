@@ -444,3 +444,130 @@ func buildRefundLog(
 		Data: "0x" + hex.EncodeToString(data),
 	}
 }
+
+// TestParseReceiptEvents_UnnamedArgs verifies that events with unnamed parameters
+// are correctly parsed. go-ethereum's abi.JSON automatically assigns "argN" names
+// to unnamed parameters, so they don't collide on empty keys.
+func TestParseReceiptEvents_UnnamedArgs(t *testing.T) {
+	// Event with unnamed parameters: event Foo(uint256, address, uint256)
+	const unnamedArgsABI = `[{
+		"anonymous": false,
+		"inputs": [
+			{"indexed": false, "name": "", "type": "uint256"},
+			{"indexed": false, "name": "", "type": "address"},
+			{"indexed": false, "name": "", "type": "uint256"}
+		],
+		"name": "UnnamedEvent",
+		"type": "event"
+	}]`
+
+	contractABI, err := abi.JSON(strings.NewReader(unnamedArgsABI))
+	require.NoError(t, err)
+
+	contractAddr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	contract := &Contract{
+		abi:  &contractABI,
+		addr: contractAddr,
+	}
+
+	event := contractABI.Events["UnnamedEvent"]
+
+	// Pack three values: uint256(100), address, uint256(200)
+	val1 := big.NewInt(100)
+	addr := common.HexToAddress("0x1111111111111111111111111111111111111111")
+	val2 := big.NewInt(200)
+
+	data, err := event.Inputs.Pack(val1, addr, val2)
+	require.NoError(t, err)
+
+	receipt := &Receipt{
+		Logs: []*Log{
+			{
+				Address: contractAddr.Hex(),
+				Topics:  []string{event.ID.Hex()},
+				Data:    "0x" + hex.EncodeToString(data),
+			},
+		},
+	}
+
+	parsed, err := contract.ParseReceiptEvents(receipt)
+	require.NoError(t, err)
+	require.Len(t, parsed, 1)
+
+	evt := parsed[0]
+	require.Equal(t, "UnnamedEvent", evt.Name)
+
+	// go-ethereum's abi.JSON parser automatically assigns "argN" names to unnamed parameters,
+	// so they are accessible by positional keys: "arg0", "arg1", "arg2"
+	require.Len(t, evt.Args, 3)
+	require.Equal(t, "100", evt.Args["arg0"])
+	require.Equal(t, addr.Hex(), evt.Args["arg1"])
+	require.Equal(t, "200", evt.Args["arg2"])
+}
+
+// TestParseReceiptEvents_MixedNamedUnnamed verifies events with both named and unnamed parameters.
+func TestParseReceiptEvents_MixedNamedUnnamed(t *testing.T) {
+	// Event with mixed named/unnamed: event Mixed(uint256 amount, address, uint256)
+	const mixedABI = `[{
+		"anonymous": false,
+		"inputs": [
+			{"indexed": true, "name": "sender", "type": "address"},
+			{"indexed": false, "name": "amount", "type": "uint256"},
+			{"indexed": false, "name": "", "type": "address"},
+			{"indexed": false, "name": "", "type": "uint256"}
+		],
+		"name": "MixedEvent",
+		"type": "event"
+	}]`
+
+	contractABI, err := abi.JSON(strings.NewReader(mixedABI))
+	require.NoError(t, err)
+
+	contractAddr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	contract := &Contract{
+		abi:  &contractABI,
+		addr: contractAddr,
+	}
+
+	event := contractABI.Events["MixedEvent"]
+
+	// Indexed: sender address
+	sender := common.HexToAddress("0xaaaa111111111111111111111111111111111111")
+	senderTopic := common.BytesToHash(common.LeftPadBytes(sender.Bytes(), 32))
+
+	// Non-indexed: amount, unnamed address, unnamed uint256
+	amount := big.NewInt(500)
+	unnamedAddr := common.HexToAddress("0xbbbb222222222222222222222222222222222222")
+	unnamedVal := big.NewInt(999)
+
+	data, err := event.Inputs.NonIndexed().Pack(amount, unnamedAddr, unnamedVal)
+	require.NoError(t, err)
+
+	receipt := &Receipt{
+		Logs: []*Log{
+			{
+				Address: contractAddr.Hex(),
+				Topics:  []string{event.ID.Hex(), senderTopic.Hex()},
+				Data:    "0x" + hex.EncodeToString(data),
+			},
+		},
+	}
+
+	parsed, err := contract.ParseReceiptEvents(receipt)
+	require.NoError(t, err)
+	require.Len(t, parsed, 1)
+
+	evt := parsed[0]
+	require.Equal(t, "MixedEvent", evt.Name)
+
+	// Verify all 4 values are preserved
+	require.Len(t, evt.Args, 4, "expected 4 args, got %d", len(evt.Args))
+
+	// Named args keep their names
+	require.Equal(t, sender.Hex(), evt.Args["sender"])
+	require.Equal(t, "500", evt.Args["amount"])
+
+	// Unnamed args get positional keys
+	require.Equal(t, unnamedAddr.Hex(), evt.Args["arg2"])
+	require.Equal(t, "999", evt.Args["arg3"])
+}
