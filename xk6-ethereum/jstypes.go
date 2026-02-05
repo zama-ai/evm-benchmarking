@@ -1,7 +1,9 @@
 package ethereum
 
 import (
+	"encoding/hex"
 	"math/big"
+	"reflect"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -49,6 +51,22 @@ type Log struct {
 	BlockHash   string   `js:"blockHash"`
 	Index       uint     `js:"logIndex"`
 	Removed     bool     `js:"removed"`
+}
+
+// ParsedEvent represents a decoded EVM event with normalized argument values.
+type ParsedEvent struct {
+	Name        string         `js:"name"`
+	Signature   string         `js:"signature"`
+	Address     string         `js:"address"`
+	BlockNumber uint64         `js:"blockNumber"`
+	TxHash      string         `js:"transactionHash"`
+	TxIndex     uint           `js:"transactionIndex"`
+	BlockHash   string         `js:"blockHash"`
+	LogIndex    uint           `js:"logIndex"`
+	Removed     bool           `js:"removed"`
+	Topics      []string       `js:"topics"`
+	Data        string         `js:"data"`
+	Args        map[string]any `js:"args"`
 }
 
 // Block wraps go-ethereum's types.Block with proper js tags for k6.
@@ -260,4 +278,122 @@ func bigIntToHex(n *big.Int) string {
 	}
 
 	return "0x" + n.Text(16)
+}
+
+// normalizeValue converts Go values to JS-friendly types for the k6 bridge.
+func normalizeValue(value any) any {
+	if value == nil {
+		return nil
+	}
+
+	if result, handled := normalizeKnownTypes(value); handled {
+		return result
+	}
+
+	return normalizeReflect(value)
+}
+
+// normalizeKnownTypes handles common Go types that need JS-friendly conversion.
+// Returns (result, true) if the type was handled, (nil, false) otherwise.
+func normalizeKnownTypes(value any) (any, bool) {
+	switch typedVal := value.(type) {
+	case common.Address:
+		return typedVal.Hex(), true
+	case common.Hash:
+		return typedVal.Hex(), true
+	case *big.Int:
+		if typedVal == nil {
+			return nil, true
+		}
+
+		return typedVal.String(), true
+	case big.Int:
+		return typedVal.String(), true
+	case []byte:
+		return "0x" + hex.EncodeToString(typedVal), true
+	case map[string]any:
+		normalized := make(map[string]any, len(typedVal))
+
+		for key, val := range typedVal {
+			normalized[key] = normalizeValue(val)
+		}
+
+		return normalized, true
+	default:
+		return nil, false
+	}
+}
+
+// normalizeReflect handles types via reflection for the JS bridge.
+func normalizeReflect(value any) any {
+	reflectVal := reflect.ValueOf(value)
+	if !reflectVal.IsValid() {
+		return nil
+	}
+
+	switch reflectVal.Kind() { //nolint:exhaustive // Only handle types that need conversion.
+	case reflect.Ptr:
+		return normalizePointer(reflectVal)
+	case reflect.Slice, reflect.Array:
+		return normalizeSliceOrArray(reflectVal)
+	case reflect.Struct:
+		return normalizeStruct(reflectVal)
+	default:
+		return value
+	}
+}
+
+// normalizePointer dereferences a pointer and normalizes its value.
+func normalizePointer(reflectVal reflect.Value) any {
+	if reflectVal.IsNil() {
+		return nil
+	}
+
+	return normalizeValue(reflectVal.Elem().Interface())
+}
+
+// normalizeSliceOrArray converts slices and arrays to JS-friendly format.
+func normalizeSliceOrArray(reflectVal reflect.Value) any {
+	length := reflectVal.Len()
+
+	// Byte arrays/slices become hex strings.
+	if reflectVal.Type().Elem().Kind() == reflect.Uint8 {
+		bytes := make([]byte, length)
+
+		for idx := range length {
+			bytes[idx] = byte(reflectVal.Index(idx).Uint())
+		}
+
+		return "0x" + hex.EncodeToString(bytes)
+	}
+
+	// Other slices/arrays are recursively normalized.
+	out := make([]any, length)
+
+	for idx := range length {
+		out[idx] = normalizeValue(reflectVal.Index(idx).Interface())
+	}
+
+	return out
+}
+
+// normalizeStruct converts exported struct fields to a map.
+func normalizeStruct(reflectVal reflect.Value) any {
+	out := make(map[string]any)
+	reflectType := reflectVal.Type()
+
+	for idx := range reflectVal.NumField() {
+		field := reflectType.Field(idx)
+		if !field.IsExported() {
+			continue
+		}
+
+		out[field.Name] = normalizeValue(reflectVal.Field(idx).Interface())
+	}
+
+	if len(out) > 0 {
+		return out
+	}
+
+	return reflectVal.Interface()
 }
