@@ -66,18 +66,31 @@ run-arbitrary-execution: build build-contracts
 	N_SSTORE=$(N_SSTORE) N_EVENTS=$(N_EVENTS) CALLDATA_SIZE=$(CALLDATA_SIZE) \
 	$(K6_OUTPUT) run --out json=tmp.json --out xk6-influxdb scripts/arbitrary-execution.ts
 
-.PHONY: run-user-decrypt
-run-user-decrypt: build build-contracts
-	@set -a && . ./.env && set +a && $(K6_OUTPUT) run --out json=tmp.json --out xk6-influxdb scripts/user-decrypt.ts
+.PHONY: run-user-decrypt-response
+run-user-decrypt-response: build build-contracts
+	@set -a && . ./.env && set +a && $(K6_OUTPUT) run --out json=tmp.json --out xk6-influxdb scripts/user-decrypt-response.ts
 
-.PHONY: run-public-decrypt
-run-public-decrypt: build build-contracts
-	@set -a && . ./.env && set +a && $(K6_OUTPUT) run --out json=tmp.json --out xk6-influxdb scripts/public-decrypt.ts
+.PHONY: run-public-decrypt-response
+run-public-decrypt-response: build build-contracts
+	@set -a && . ./.env && set +a && $(K6_OUTPUT) run --out json=tmp.json --out xk6-influxdb scripts/public-decrypt-response.ts
+
+.PHONY: run-public-decrypt-flow
+run-public-decrypt-flow: build build-contracts
+	@set -a && . ./.env && set +a && $(K6_OUTPUT) run --out json=tmp.json --out xk6-influxdb scripts/public-decrypt-flow.ts
+
+.PHONY: run-user-decrypt-flow
+run-user-decrypt-flow: build build-contracts
+	@set -a && . ./.env && set +a && $(K6_OUTPUT) run --out json=tmp.json --out xk6-influxdb scripts/user-decrypt-flow.ts
 
 .PHONY: run-allow-public-decrypt
 run-allow-public-decrypt: build build-contracts
 	@set -a && . ./.env && set +a && \
 	$(K6_OUTPUT) run --out json=tmp.json --out xk6-influxdb scripts/allow-public-decrypt.ts
+
+.PHONY: run-input-verification
+run-input-verification: build build-contracts
+	@set -a && . ./.env && set +a && \
+	$(K6_OUTPUT) run --out json=tmp.json --out xk6-influxdb scripts/input-verification.ts
 
 .PHONY: refund
 refund:
@@ -102,9 +115,12 @@ help:
 	@echo "Available targets:"
 	@echo "  build                      - Build custom k6 binary"
 	@echo "  clean                      - Clean build artifacts"
-	@echo "  run-user-decrypt           - Run user decrypt benchmark"
-	@echo "  run-public-decrypt         - Run public decrypt benchmark"
-	@echo "  run-allow-public-decrypt   - Run allowPublicDecrypt benchmark"
+	@echo "  run-public-decrypt-flow      - Run public decryption request benchmark (DecryptionMockV2)"
+	@echo "  run-user-decrypt-flow        - Run user decryption request benchmark (DecryptionMockV2)"
+	@echo "  run-user-decrypt-response    - Run user decrypt response-only benchmark (DecryptionMock)"
+	@echo "  run-public-decrypt-response  - Run public decrypt response-only benchmark (DecryptionMock)"
+	@echo "  run-allow-public-decrypt     - Run allowPublicDecrypt benchmark"
+	@echo "  run-input-verification       - Run input verification request benchmark"
 	@echo "  run-eth-transfer           - Run ETH transfer benchmark"
 	@echo "  run-erc20                  - Run ERC20 transfer benchmark (deploys ERC20 in setup, sync tx)"
 	@echo "  run-arbitrary-execution    - Run arbitrary execution benchmark (N_SSTORE, N_EVENTS, or CALLDATA_SIZE)"
