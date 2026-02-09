@@ -29,6 +29,8 @@ var (
 	errInvalidNumberType         = errors.New("expected number or string type")
 	errInvalidBytesType          = errors.New("expected hex string or bytes type")
 	errIntegerOverflow           = errors.New("integer overflow")
+	errReceiptRequired           = errors.New("receipt is required")
+	errMissingEventSignature     = errors.New("missing event signature topic")
 )
 
 const (
@@ -505,4 +507,153 @@ func (c *Contract) TxnAndWaitReceipt(method string, opts TxnOpts, args ...any) (
 
 	// Send and poll for receipt.
 	return c.client.SendTransactionAndWaitReceipt(transaction)
+}
+
+// ParseReceiptEvents decodes logs in the receipt using the contract ABI.
+// It returns a slice of parsed events with JS-friendly argument values.
+func (c *Contract) ParseReceiptEvents(receipt *Receipt) ([]*ParsedEvent, error) {
+	if c == nil || c.abi == nil {
+		return nil, errContractNotInitialized
+	}
+
+	if receipt == nil {
+		return nil, errReceiptRequired
+	}
+
+	if len(receipt.Logs) == 0 {
+		return []*ParsedEvent{}, nil
+	}
+
+	eventsByID := buildEventIndex(c.abi)
+	parsed := make([]*ParsedEvent, 0, len(receipt.Logs))
+
+	for logIndex, logEntry := range receipt.Logs {
+		event, ok := c.matchLogToEvent(logEntry, eventsByID)
+		if !ok {
+			continue
+		}
+
+		parsedEvent, err := c.parseLogEntry(logIndex, logEntry, event)
+		if err != nil {
+			return nil, err
+		}
+
+		parsed = append(parsed, parsedEvent)
+	}
+
+	return parsed, nil
+}
+
+// buildEventIndex creates a lookup map of event ID to event definition.
+func buildEventIndex(contractABI *abi.ABI) map[common.Hash]abi.Event {
+	eventsByID := make(map[common.Hash]abi.Event, len(contractABI.Events))
+
+	for _, event := range contractABI.Events {
+		if !event.Anonymous {
+			eventsByID[event.ID] = event
+		}
+	}
+
+	return eventsByID
+}
+
+// matchLogToEvent checks if a log matches a known event in the contract.
+// Returns the matching event and true if found, or empty event and false otherwise.
+func (c *Contract) matchLogToEvent(logEntry *Log, eventsByID map[common.Hash]abi.Event) (abi.Event, bool) {
+	if logEntry == nil || len(logEntry.Topics) == 0 {
+		return abi.Event{}, false
+	}
+
+	if c.addr != (common.Address{}) && common.HexToAddress(logEntry.Address) != c.addr {
+		return abi.Event{}, false
+	}
+
+	topic0 := common.HexToHash(logEntry.Topics[0])
+	event, ok := eventsByID[topic0]
+
+	return event, ok
+}
+
+// parseLogEntry decodes a single log entry into a ParsedEvent.
+func (c *Contract) parseLogEntry(logIndex int, logEntry *Log, event abi.Event) (*ParsedEvent, error) {
+	args, err := decodeEventData(logIndex, logEntry, event)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := parseIndexedArgs(logIndex, logEntry, event, args); err != nil {
+		return nil, err
+	}
+
+	normalized := make(map[string]any, len(args))
+
+	for key, value := range args {
+		normalized[key] = normalizeValue(value)
+	}
+
+	return &ParsedEvent{
+		Name:        event.Name,
+		Signature:   event.Sig,
+		Address:     logEntry.Address,
+		BlockNumber: logEntry.BlockNumber,
+		TxHash:      logEntry.TxHash,
+		TxIndex:     logEntry.TxIndex,
+		BlockHash:   logEntry.BlockHash,
+		LogIndex:    logEntry.Index,
+		Removed:     logEntry.Removed,
+		Topics:      logEntry.Topics,
+		Data:        logEntry.Data,
+		Args:        normalized,
+	}, nil
+}
+
+// decodeEventData unpacks non-indexed event arguments from the log data.
+func decodeEventData(logIndex int, logEntry *Log, event abi.Event) (map[string]any, error) {
+	dataBytes, err := decodeHexString(logEntry.Data)
+	if err != nil {
+		return nil, fmt.Errorf("log %d (%s): invalid data: %w", logIndex, event.Name, err)
+	}
+
+	args := make(map[string]any)
+	if err := event.Inputs.NonIndexed().UnpackIntoMap(args, dataBytes); err != nil {
+		return nil, fmt.Errorf("log %d (%s): failed to unpack data: %w", logIndex, event.Name, err)
+	}
+
+	return args, nil
+}
+
+// parseIndexedArgs decodes indexed event arguments from log topics.
+func parseIndexedArgs(logIndex int, logEntry *Log, event abi.Event, args map[string]any) error {
+	indexed := indexedArguments(event.Inputs)
+	if len(indexed) == 0 {
+		return nil
+	}
+
+	if len(logEntry.Topics) < 1 {
+		return fmt.Errorf("log %d (%s): %w", logIndex, event.Name, errMissingEventSignature)
+	}
+
+	topics := make([]common.Hash, 0, len(logEntry.Topics)-1)
+
+	for _, topic := range logEntry.Topics[1:] {
+		topics = append(topics, common.HexToHash(topic))
+	}
+
+	if err := abi.ParseTopicsIntoMap(args, indexed, topics); err != nil {
+		return fmt.Errorf("log %d (%s): failed to parse topics: %w", logIndex, event.Name, err)
+	}
+
+	return nil
+}
+
+func indexedArguments(arguments abi.Arguments) abi.Arguments {
+	var indexed []abi.Argument
+
+	for _, arg := range arguments {
+		if arg.Indexed {
+			indexed = append(indexed, arg)
+		}
+	}
+
+	return indexed
 }

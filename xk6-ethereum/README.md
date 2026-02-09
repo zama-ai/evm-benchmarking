@@ -90,6 +90,12 @@ const receipt = contract.txnSync(
 
 // Encode calldata without sending
 const calldata = contract.encodeABI("transfer", recipient, amount);
+
+// Parse events from a receipt
+const events = contract.parseReceiptEvents(receipt);
+for (const event of events) {
+  console.log(`Event: ${event.name}, Args:`, event.args);
+}
 ```
 
 ### Batch Operations (Multicall3)

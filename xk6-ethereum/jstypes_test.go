@@ -148,3 +148,80 @@ func TestBigIntToHex(t *testing.T) {
 	require.Equal(t, "0x0", bigIntToHex(nil))
 	require.Equal(t, "0x2a", bigIntToHex(big.NewInt(42)))
 }
+
+func TestNormalizeValue_Primitives(t *testing.T) {
+	address := common.HexToAddress("0x000000000000000000000000000000000000dead")
+	require.Equal(t, address.Hex(), normalizeValue(address))
+
+	hash := common.HexToHash("0x00000000000000000000000000000000000000000000000000000000000000be")
+	require.Equal(t, hash.Hex(), normalizeValue(hash))
+	require.Equal(t, "123456789",
+		normalizeValue(big.NewInt(123456789)))
+
+	b := big.NewInt(42)
+	require.Equal(t, "42", normalizeValue(*b))
+
+	require.Equal(t, "0x0102", normalizeValue([]byte{0x01, 0x02}))
+}
+
+func TestNormalizeValue_ByteArray(t *testing.T) {
+	var data [4]byte
+
+	data[0] = 0xaa
+	data[1] = 0xbb
+	data[2] = 0xcc
+	data[3] = 0xdd
+
+	require.Equal(t, "0xaabbccdd", normalizeValue(data))
+}
+
+func TestNormalizeValue_SlicesAndMaps(t *testing.T) {
+	input := []any{
+		common.HexToAddress("0x0000000000000000000000000000000000000001"),
+		big.NewInt(7),
+		[]byte{0x01, 0x02},
+	}
+
+	normalized := normalizeValue(input)
+	expectedAddr := common.HexToAddress("0x0000000000000000000000000000000000000001").Hex()
+	require.Equal(t, []any{expectedAddr, "7", "0x0102"}, normalized)
+
+	nested := map[string]any{
+		"amount": big.NewInt(5),
+		"addr":   common.HexToAddress("0x0000000000000000000000000000000000000002"),
+	}
+
+	expectedNestedAddr := common.HexToAddress("0x0000000000000000000000000000000000000002").Hex()
+	require.Equal(t, map[string]any{
+		"amount": "5",
+		"addr":   expectedNestedAddr,
+	}, normalizeValue(nested))
+}
+
+func TestNormalizeValue_StructsAndPointers(t *testing.T) {
+	type inner struct {
+		Data []byte
+	}
+
+	type outer struct {
+		Count *big.Int
+		Inner inner
+		Note  string
+	}
+
+	value := outer{
+		Count: big.NewInt(9),
+		Inner: inner{Data: []byte{0xde, 0xad}},
+		Note:  "ok",
+	}
+
+	require.Equal(t, map[string]any{
+		"Count": "9",
+		"Inner": map[string]any{
+			"Data": "0xdead",
+		},
+		"Note": "ok",
+	}, normalizeValue(value))
+
+	require.Equal(t, "9", normalizeValue(value.Count))
+}
