@@ -184,5 +184,4 @@ utilities.
 
 ## License
 
-MIT License. Portions derived from
-[xk6-ethereum](https://github.com/distribworks/xk6-ethereum).
+MIT License. Inspired by original work from DistribWorks.

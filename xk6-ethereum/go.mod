@@ -1,4 +1,4 @@
-// Copy from github.com/distribworks/xk6-ethereum
+// Inspired by original work from DistribWorks.
 module xk6-ethereum
 
 go 1.24.0
